@@ -1,0 +1,12 @@
+@import "tailwindcss";
+
+/* This ensures the dark background from your code actually applies */
+@theme {
+  --color-trade-blue: #3b82f6;
+  --color-trade-dark: #0f172a;
+}
+
+:root {
+  background-color: #0f172a;
+  color: white;
+}
