@@ -1,27 +1,23 @@
-// frontend/src/App.jsx
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import Navbar from "./components/Navbar";
+import Dashboard from "./pages/Dashboard";
+import CommodityTrends from "./pages/CommodityTrends";
 
-// Inside your App component:
-const [riskData, setRiskData] = useState({ score: "--", level: "Loading..." });
+function App() {
+  return (
+    <BrowserRouter>
+      <div className="min-h-screen bg-gray-950 text-white">
+        <Navbar />
+        <main className="p-6">
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" />} />
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/commodities" element={<CommodityTrends />} />
+          </Routes>
+        </main>
+      </div>
+    </BrowserRouter>
+  );
+}
 
-useEffect(() => {
-  const fetchRisk = async () => {
-    try {
-      const res = await axios.get(
-        "http://localhost:5000/api/analytics/risk/BD",
-      );
-      setRiskData({ score: res.data.risk_score, level: res.data.level });
-    } catch (err) {
-      console.error("Link to bridge failed");
-    }
-  };
-  fetchRisk();
-}, []);
-
-// Update your StatCard call:
-<StatCard
-  icon={<Shield className="text-emerald-400" />}
-  title="Risk Index"
-  value={`${riskData.level} (${riskData.score})`}
-/>;
+export default App;
