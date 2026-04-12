@@ -276,4 +276,101 @@ router.post("/risk/:country/breakdown", async (req, res) => {
   }
 });
 
+// POST /api/analytics/risk-score/batch
+// F4 - Proxies batch risk scoring to avoid CORS/coupling with port 8000
+router.post("/risk-score/batch", async (req, res) => {
+  try {
+    const response = await axios.post(`${ML_BASE}/api/risk-score/batch`, req.body);
+    res.json(response.data);
+  } catch (err) {
+    res.status(500).json({ message: "ML Service batch endpoint unreachable" });
+  }
+});
 module.exports = router;
+
+
+
+// GET /api/analytics/compare
+// F4 — Dual-selection analysis for comparative intelligence (Now with Commodity filter!)
+router.get("/compare", async (req, res) => {
+  try {
+    const { countryA, countryB, type = "export", commodity } = req.query;
+
+    if (!countryA || !countryB) {
+      return res.status(400).json({ message: "Please provide both countryA and countryB codes." });
+    }
+
+    const cA = await Country.findOne({ code: countryA.toUpperCase() });
+    const cB = await Country.findOne({ code: countryB.toUpperCase() });
+
+    if (!cA || !cB) {
+      return res.status(404).json({ message: "One or both countries not found in the database." });
+    }
+
+    // Set up our base match criteria
+    const matchStage = {
+      country: { $in: [cA._id, cB._id] },
+      type: type,
+    };
+
+    // If a specific commodity was selected, add it to the filter
+    if (commodity && commodity !== "all") {
+      const mongoose = require("mongoose");
+      matchStage.commodity = new mongoose.Types.ObjectId(commodity);
+    }
+
+    // Aggregation pipeline
+    const pipeline = [
+      { $match: matchStage },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$date" },
+            month: { $month: "$date" },
+            country: "$country",
+          },
+          totalValue: { $sum: "$value" },
+        },
+      },
+      {
+        $group: {
+          _id: { year: "$_id.year", month: "$_id.month" },
+          records: {
+            $push: {
+              countryId: "$_id.country",
+              value: "$totalValue",
+            },
+          },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ];
+
+    const results = await TradeRecord.aggregate(pipeline);
+
+    // Format the payload for Recharts
+    const formattedData = results.map((row) => {
+      const dateStr = `${row._id.year}-${String(row._id.month).padStart(2, "0")}`;
+      const dataPoint = { date: dateStr };
+
+      const aRecord = row.records.find((r) => r.countryId.toString() === cA._id.toString());
+      const bRecord = row.records.find((r) => r.countryId.toString() === cB._id.toString());
+
+      dataPoint[cA.code] = aRecord ? aRecord.value : 0;
+      dataPoint[cB.code] = bRecord ? bRecord.value : 0;
+
+      return dataPoint;
+    });
+
+    res.json({
+      meta: {
+        countryA: { code: cA.code, name: cA.name },
+        countryB: { code: cB.code, name: cB.name },
+        type: type,
+      },
+      data: formattedData,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
