@@ -2,6 +2,8 @@
 
 A fullstack AI-powered trade analytics platform built with React, Node.js, FastAPI, and MongoDB.
 
+**Repository:** [github.com/zariffromlatif/TradeAI](https://github.com/zariffromlatif/TradeAI)
+
 ---
 
 ## Sprint 1 — Completed Features
@@ -19,25 +21,42 @@ A fullstack AI-powered trade analytics platform built with React, Node.js, FastA
 
 ---
 
+## Sprint 2 — Member A (Data Architect)
+
+| Feature | Description | Status |
+| ------- | ----------- | ------ |
+| **Feature 3** | Trade balance time series (`GET /api/analytics/trade-balance`) | ✅ Done |
+| **Feature 1 (extended)** | Per-country import/export aggregates (`GET /api/analytics/country/:code`) | ✅ Done |
+| **Feature 12** | Order anomaly checks + historical baselines (`services/orderAnomaly.js`, `GET /api/orders/anomalies`) | ✅ Done |
+| **Security** | JWT auth; **POST/PUT/DELETE** on countries, commodities, and trade records require **admin** Bearer token | ✅ Done |
+
+---
+
 ## Project Structure
 
 ```
 TradeAI/
 ├── backend/                        ← Node.js + Express API (port 5000)
-│   ├── .env                        ← DO NOT COMMIT (ask Member A for credentials)
+│   ├── .env                        ← DO NOT COMMIT (see .env.example)
+│   ├── .env.example
 │   ├── server.js                   ← Express app entry point
 │   ├── seed.js                     ← Run once to populate database
+│   ├── middleware/
+│   │   └── auth.js                 ← JWT requireAuth / requireAdmin
+│   ├── services/
+│   │   └── orderAnomaly.js         ← Feature 12: anomaly rules + trade history
 │   ├── models/
 │   │   ├── Country.js              ← GDP, inflation, trade balance
 │   │   ├── Commodity.js            ← price history array
 │   │   ├── TradeRecord.js          ← import/export records
 │   │   ├── Order.js                ← simulated trade orders (Member D)
-│   │   └── User.js                 ← user tiers: free/premium (Member D)
+│   │   └── User.js                 ← tier + role (admin/user)
 │   └── routes/
+│       ├── auth.js                 ← register, login, me
 │       ├── countries.js            ← CRUD /api/countries
 │       ├── commodities.js          ← CRUD /api/commodities
 │       ├── trade.js                ← CRUD /api/trade
-│       ├── analytics.js            ← Dashboard + ML bridge /api/analytics
+│       ├── analytics.js            ← Dashboard, trade-balance, country, ML bridge
 │       ├── orders.js               ← CRUD /api/orders (Member D)
 │       └── payment.js              ← Stripe checkout /api/payment (Member D)
 │
@@ -66,15 +85,15 @@ TradeAI/
 
 - Node.js v18+
 - Python 3.10+
-- MongoDB Atlas account (get `MONGO_URI` from Member A)
-- Stripe account (get `STRIPE_SECRET_KEY` from Member A/D)
+- MongoDB Atlas account (`MONGO_URI`)
+- Stripe account (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) for payments
 
 ---
 
 ### 1. Clone the repo
 
 ```bash
-git clone https://github.com/YOURUSERNAME/TradeAI.git
+git clone https://github.com/zariffromlatif/TradeAI.git
 cd TradeAI
 ```
 
@@ -85,20 +104,19 @@ cd backend
 npm install
 ```
 
-Create `backend/.env`:
+Create `backend/.env` from `.env.example` and fill in real values:
 
-```
-MONGO_URI=mongodb+srv://<user>:<password>@cluster0.tsjkfiq.mongodb.net/tradeai?appName=Cluster0
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_WEBHOOK_SECRET=whsec_placeholder
-```
-
-> Ask **Member A** privately for the actual credentials.
+- `MONGO_URI` — Atlas connection string (include database name, e.g. `/tradeai`)
+- `JWT_SECRET` — long random string (required for register/login)
+- `JWT_EXPIRES_IN` — optional, default `7d`
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` — for payment routes
 
 ```bash
 node server.js
 # → Server on port 5000
 ```
+
+**First user** to `POST /api/auth/register` gets `role: admin` (empty `users` collection). Use `Authorization: Bearer <token>` on **POST/PUT/DELETE** for `/api/countries`, `/api/commodities`, `/api/trade`.
 
 ### 3. ML Service setup
 
@@ -143,20 +161,31 @@ Open **3 terminals simultaneously**:
 
 ### Backend (port 5000)
 
-| Method              | Endpoint                                 | Description                         |
-| ------------------- | ---------------------------------------- | ----------------------------------- |
-| GET                 | `/api/countries`                         | All countries                       |
-| GET/POST/PUT/DELETE | `/api/countries/:id`                     | Country CRUD                        |
-| GET                 | `/api/commodities`                       | All commodities                     |
-| GET                 | `/api/commodities/:id`                   | Single commodity + price history    |
-| GET                 | `/api/trade`                             | All trade records                   |
-| GET                 | `/api/analytics/dashboard`               | Top 5 exporters + importers         |
-| GET                 | `/api/analytics/risk/:country`           | Risk score via ML bridge            |
-| POST                | `/api/analytics/risk-score`              | Full risk score with all indicators |
-| POST                | `/api/analytics/risk/:country/breakdown` | Risk interpretability breakdown     |
-| GET/POST/PUT/DELETE | `/api/orders`                            | Order management                    |
-| POST                | `/api/payment/create-session`            | Stripe checkout session             |
-| GET                 | `/api/payment/status/:userId`            | User tier (free/premium)            |
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| POST | `/api/auth/register` | Register (first user becomes `admin`) |
+| POST | `/api/auth/login` | Login → JWT |
+| GET | `/api/auth/me` | Current user (Bearer required) |
+| GET | `/api/countries` | All countries |
+| GET | `/api/countries/:id` | Single country |
+| POST/PUT/DELETE | `/api/countries`, `/api/countries/:id` | **Admin + Bearer** required |
+| GET | `/api/commodities` | All commodities |
+| GET | `/api/commodities/:id` | Single commodity + price history |
+| POST/PUT/DELETE | `/api/commodities`, `/api/commodities/:id` | **Admin + Bearer** required |
+| GET | `/api/trade` | All trade records (populated) |
+| GET | `/api/trade/:id` | Single trade record |
+| POST/PUT/DELETE | `/api/trade`, `/api/trade/:id` | **Admin + Bearer** required |
+| GET | `/api/analytics/dashboard` | Top 5 exporters + importers |
+| GET | `/api/analytics/trade-balance` | Monthly balance; query `country`, `region` |
+| GET | `/api/analytics/country/:code` | Per-country import/export; `?monthly=true` for series |
+| GET | `/api/analytics/risk/:country` | Risk score via ML bridge |
+| POST | `/api/analytics/risk-score` | Full risk score (body → ML) |
+| POST | `/api/analytics/risk/:country/breakdown` | Risk interpretability breakdown |
+| GET | `/api/orders` | All orders |
+| GET | `/api/orders/anomalies` | Orders flagged by anomaly logic |
+| GET/POST/PUT/DELETE | `/api/orders`, `/api/orders/:id` | Order management |
+| POST | `/api/payment/create-session` | Stripe checkout session |
+| GET | `/api/payment/status/:userId` | User tier (free/premium) |
 
 ### ML Service (port 8000)
 
@@ -171,6 +200,12 @@ Open **3 terminals simultaneously**:
 ---
 
 ## What Each Member Should Know
+
+### Member A (Backend / data)
+
+- Secured CRUD: use **admin** JWT on writes to countries, commodities, trade.
+- Country analytics: `/api/analytics/country/:code` and `/api/analytics/trade-balance`.
+- Anomaly logic lives in `backend/services/orderAnomaly.js`.
 
 ### Member B (Frontend)
 
@@ -197,6 +232,6 @@ Open **3 terminals simultaneously**:
 ## Database
 
 - **Provider:** MongoDB Atlas (cloud)
-- **Database:** `tradeai`
+- **Database:** `tradeai` (or as configured in `MONGO_URI`)
 - **Collections:** `countries`, `commodities`, `traderecords`, `orders`, `users`
 - **Seed data:** 5 countries, 5 commodities, 150 trade records

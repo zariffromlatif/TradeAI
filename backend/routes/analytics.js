@@ -49,6 +49,179 @@ router.get("/dashboard", async (req, res) => {
   }
 });
 
+// GET /api/analytics/trade-balance
+router.get("/trade-balance", async (req, res) => {
+  try {
+    const { country, region } = req.query;
+    
+    // Build the aggregation pipeline
+    const pipeline = [
+      {
+        $lookup: {
+          from: "countries",
+          localField: "country",
+          foreignField: "_id",
+          as: "countryInfo"
+        }
+      },
+      { $unwind: "$countryInfo" }
+    ];
+
+    // Optional filters
+    const matchStage = {};
+    if (country) {
+      matchStage["countryInfo.code"] = country.toUpperCase();
+    }
+    if (region) {
+      matchStage["countryInfo.region"] = new RegExp(region, 'i');
+    }
+
+    if (Object.keys(matchStage).length > 0) {
+      pipeline.push({ $match: matchStage });
+    }
+
+    // Group by year, month, and type
+    pipeline.push({
+      $group: {
+        _id: {
+          year: { $year: "$date" },
+          month: { $month: "$date" },
+          type: "$type"
+        },
+        totalValue: { $sum: "$value" }
+      }
+    });
+
+    // Sub-group to combine export and import into a single document per year/month
+    pipeline.push({
+      $group: {
+        _id: { year: "$_id.year", month: "$_id.month" },
+        exportValue: {
+          $sum: {
+            $cond: [{ $eq: ["$_id.type", "export"] }, "$totalValue", 0]
+          }
+        },
+        importValue: {
+          $sum: {
+            $cond: [{ $eq: ["$_id.type", "import"] }, "$totalValue", 0]
+          }
+        }
+      }
+    });
+
+    // Project final cleanly structured payload
+    pipeline.push({
+      $project: {
+        _id: 0,
+        year: "$_id.year",
+        month: "$_id.month",
+        exportValue: 1,
+        importValue: 1,
+        balance: { $subtract: ["$exportValue", "$importValue"] }
+      }
+    });
+
+    // Chronological order
+    pipeline.push({
+      $sort: { year: 1, month: 1 }
+    });
+
+    const results = await TradeRecord.aggregate(pipeline);
+    res.json(results);
+
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/analytics/country/:code?monthly=true
+// F1 — country-wise import/export aggregates
+router.get("/country/:code", async (req, res) => {
+  try {
+    const code = req.params.code.toUpperCase();
+    const monthly =
+      req.query.monthly === "1" ||
+      req.query.monthly === "true" ||
+      req.query.monthly === "yes";
+
+    const country = await Country.findOne({ code });
+    if (!country) {
+      return res.status(404).json({ message: "Country not found" });
+    }
+
+    if (!monthly) {
+      const byType = await TradeRecord.aggregate([
+        { $match: { country: country._id } },
+        {
+          $group: {
+            _id: "$type",
+            totalValue: { $sum: "$value" },
+            totalVolume: { $sum: "$volume" },
+            recordCount: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const row = (t) =>
+        byType.find((x) => x._id === t) || {
+          totalValue: 0,
+          totalVolume: 0,
+          recordCount: 0,
+        };
+      const imports = row("import");
+      const exports = row("export");
+
+      return res.json({
+        country: {
+          id: country._id,
+          name: country.name,
+          code: country.code,
+          region: country.region,
+        },
+        import: {
+          totalValue: imports.totalValue,
+          totalVolume: imports.totalVolume,
+          recordCount: imports.recordCount,
+        },
+        export: {
+          totalValue: exports.totalValue,
+          totalVolume: exports.totalVolume,
+          recordCount: exports.recordCount,
+        },
+        tradeBalanceValue: exports.totalValue - imports.totalValue,
+      });
+    }
+
+    const series = await TradeRecord.aggregate([
+      { $match: { country: country._id } },
+      {
+        $group: {
+          _id: {
+            year: { $year: "$date" },
+            month: { $month: "$date" },
+            type: "$type",
+          },
+          totalValue: { $sum: "$value" },
+          totalVolume: { $sum: "$volume" },
+        },
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } },
+    ]);
+
+    return res.json({
+      country: {
+        id: country._id,
+        name: country.name,
+        code: country.code,
+        region: country.region,
+      },
+      monthlyByType: series,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/analytics/risk/:country
 // Looks up country from DB, builds indicator payload from stored data, calls ML service
 router.get("/risk/:country", async (req, res) => {

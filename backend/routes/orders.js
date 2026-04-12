@@ -1,6 +1,20 @@
 const express = require("express");
 const router = express.Router();
 const Order = require("../models/Order");
+const Commodity = require("../models/Commodity");
+const { evaluateSimulatedOrder } = require("../services/orderAnomaly");
+
+// GET anomalous orders
+router.get("/anomalies", async (req, res) => {
+  try {
+    const anomalousOrders = await Order.find({ isAnomaly: true })
+      .populate("commodity", "name category currentPrice")
+      .populate("country", "name code");
+    res.json(anomalousOrders);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
 
 // GET all orders
 router.get("/", async (req, res) => {
@@ -30,8 +44,20 @@ router.get("/:id", async (req, res) => {
 // POST create order
 router.post("/", async (req, res) => {
   try {
-    const { commodity, country, type, quantity, pricePerUnit, notes } =
-      req.body;
+    const { commodity, country, type, quantity, pricePerUnit, notes } = req.body;
+
+    const commodityDoc = await Commodity.findById(commodity);
+    if (!commodityDoc) {
+      return res.status(404).json({ message: "Commodity not found" });
+    }
+
+    const { isAnomaly, anomalyReason } = await evaluateSimulatedOrder({
+      commodity: commodityDoc,
+      country,
+      quantity,
+      pricePerUnit,
+    });
+
     const totalValue = quantity * pricePerUnit;
     const order = new Order({
       commodity,
@@ -41,6 +67,8 @@ router.post("/", async (req, res) => {
       pricePerUnit,
       totalValue,
       notes,
+      isAnomaly,
+      anomalyReason: anomalyReason.trim(),
     });
     const saved = await order.save();
     res.status(201).json(saved);

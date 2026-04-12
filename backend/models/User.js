@@ -6,9 +6,15 @@ const UserSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     password: { type: String, required: true },
     tier: { type: String, enum: ["free", "premium"], default: "free" },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
     stripeCustomerId: { type: String },
   },
   { timestamps: true },
+  
 );
 
 module.exports = mongoose.model("User", UserSchema);

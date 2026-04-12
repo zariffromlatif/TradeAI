@@ -22,6 +22,8 @@ const OrderSchema = new mongoose.Schema(
       default: "pending",
     },
     notes: { type: String },
+    isAnomaly: { type: Boolean, default: false },
+    anomalyReason: { type: String, default: "" },
   },
   { timestamps: true },
 );
