@@ -1,0 +1,120 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
+const API = "http://localhost:5000/api";
+
+function Premium() {
+  const navigate = useNavigate();
+  const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState("");
+  const [error, setError] = useState("");
+  const [loadingStripe, setLoadingStripe] = useState(false);
+  const [loadingDemo, setLoadingDemo] = useState(false);
+
+  const handleCheckout = async (e) => {
+    e.preventDefault();
+    setError("");
+    setLoadingStripe(true);
+    try {
+      const res = await axios.post(`${API}/payment/create-session`, {
+        userId,
+        email,
+      });
+      if (res.data?.url) {
+        window.location.href = res.data.url;
+      } else {
+        setError("No checkout URL returned.");
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Request failed.");
+    } finally {
+      setLoadingStripe(false);
+    }
+  };
+
+  const handleDemoUpgrade = async () => {
+    setError("");
+    if (!userId.trim()) {
+      setError("Enter your MongoDB user ID.");
+      return;
+    }
+    setLoadingDemo(true);
+    try {
+      await axios.post(`${API}/payment/demo-upgrade`, { userId: userId.trim() });
+      navigate("/payment/success");
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Request failed.");
+    } finally {
+      setLoadingDemo(false);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto space-y-6">
+      <h1 className="text-2xl font-bold text-white">Upgrade to Premium</h1>
+      <p className="text-gray-400 text-sm space-y-2">
+        <span className="block">
+          <strong className="text-gray-300">Demo:</strong> upgrade without Stripe
+          if <code className="text-emerald-400">DEMO_PAYMENT=true</code> in{" "}
+          <code className="text-emerald-400">backend/.env</code> (restart server).
+        </span>
+        <span className="block">
+          <strong className="text-gray-300">Stripe:</strong> use MongoDB{" "}
+          <code className="text-emerald-400">users._id</code> and account email.
+          Test card:{" "}
+          <code className="text-emerald-400">4242 4242 4242 4242</code>.
+        </span>
+      </p>
+      {error && (
+        <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </div>
+      )}
+      <form
+        onSubmit={handleCheckout}
+        className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4"
+      >
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-gray-400">User ID (MongoDB)</span>
+          <input
+            value={userId}
+            onChange={(e) => setUserId(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+            placeholder="64a..."
+            required
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
+          <span className="text-gray-400">Email</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+            required
+          />
+        </label>
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={handleDemoUpgrade}
+            disabled={loadingStripe || loadingDemo}
+            className="w-full bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg"
+          >
+            {loadingDemo ? "Upgrading…" : "Simulate premium (demo)"}
+          </button>
+          <button
+            type="submit"
+            disabled={loadingStripe || loadingDemo}
+            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg"
+          >
+            {loadingStripe ? "Redirecting…" : "Pay with Stripe"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export default Premium;

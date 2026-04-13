@@ -1,4 +1,5 @@
 const express = require("express");
+const mongoose = require("mongoose");
 const router = express.Router();
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const User = require("../models/User");
@@ -29,6 +30,35 @@ router.post("/create-session", async (req, res) => {
     });
 
     res.json({ url: session.url, sessionId: session.id });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/payment/demo-upgrade
+// Local/demo only: sets tier to premium without Stripe. Requires DEMO_PAYMENT=true in .env
+router.post("/demo-upgrade", async (req, res) => {
+  if (process.env.DEMO_PAYMENT !== "true") {
+    return res.status(403).json({ message: "Demo payment is disabled" });
+  }
+  try {
+    const { userId } = req.body;
+    if (
+      !userId ||
+      typeof userId !== "string" ||
+      !mongoose.Types.ObjectId.isValid(userId)
+    ) {
+      return res.status(400).json({ message: "Valid userId is required" });
+    }
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { tier: "premium" },
+      { new: true },
+    ).select("name email tier");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.json({ ok: true, user });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

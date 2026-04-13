@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime, timezone
+from sklearn.linear_model import LinearRegression
 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
@@ -43,7 +44,7 @@ class MacroIndicators(BaseModel):
 
 
 class RiskScoreRequest(BaseModel):
-    country_code: str = Field(..., min_length=3, max_length=3)
+    country_code: str = Field(..., min_length=2, max_length=3)
     country_name: str
     indicators:   MacroIndicators
 
@@ -67,6 +68,13 @@ class RiskScoreRequest(BaseModel):
             }
         }
 
+class VolumeForecastRequest(BaseModel):
+    values: list[float] = Field(..., min_length=1)
+    horizon: int = Field(1, ge=1, le=12)
+
+
+class PriceVolatilityRequest(BaseModel):
+    prices: list[float] = Field(..., min_length=3)
 
 INDICATOR_CONFIG = [
     {"field": "gdp_growth_rate",             "label": "GDP Growth Rate (%)",              "dimension": "economic_stability", "weight": 0.45, "invert": True,  "ref_min": -5.0,  "ref_max": 10.0},
@@ -254,3 +262,63 @@ async def risk_breakdown(country_code: str, payload: RiskScoreRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/forecast/trade-volume")
+async def forecast_trade_volume(body: VolumeForecastRequest):
+    """F7 — lag-1 linear regression on monthly total volumes; naive fallback if short series."""
+    v = [float(x) for x in body.values if x is not None and np.isfinite(float(x))]
+    if len(v) < 1:
+        raise HTTPException(status_code=400, detail="No valid volume values")
+    h = body.horizon
+    if len(v) < 4:
+        last = max(0.0, v[-1])
+        fc = [{"step": i + 1, "value": round(last, 2)} for i in range(h)]
+        return {
+            "method": "naive_last",
+            "historical_values": v,
+            "forecast": fc,
+            "note": "Series too short for regression; repeated last observation.",
+        }
+    X = np.array([[v[i]] for i in range(len(v) - 1)])
+    y = np.array(v[1:])
+    model = LinearRegression().fit(X, y)
+    preds = []
+    cur = v[-1]
+    for step in range(h):
+        nxt = float(model.predict([[cur]])[0])
+        nxt = max(0.0, nxt)
+        preds.append({"step": step + 1, "value": round(nxt, 2)})
+        cur = nxt
+    return {
+        "method": "lag1_linear_regression",
+        "historical_values": v,
+        "forecast": preds,
+        "model_version": "f7-volume-v1",
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+@app.post("/api/forecast/price-volatility")
+async def forecast_price_volatility(body: PriceVolatilityRequest):
+    """F7 — log-return volatility from commodity price history (proxy, not FX)."""
+    p = np.array([float(x) for x in body.prices], dtype=float)
+    if np.any(p <= 0):
+        raise HTTPException(status_code=400, detail="All prices must be positive")
+    log_ret = np.diff(np.log(p))
+    log_ret = log_ret[np.isfinite(log_ret)]
+    if len(log_ret) < 2:
+        raise HTTPException(status_code=400, detail="Not enough valid returns")
+    overall = float(np.std(log_ret, ddof=1))
+    w = min(6, len(log_ret))
+    rolling = []
+    for i in range(w - 1, len(log_ret)):
+        seg = log_ret[i - w + 1 : i + 1]
+        rolling.append(
+            {"end_index": int(i), "volatility": round(float(np.std(seg, ddof=1)), 6)}
+        )
+    return {
+        "log_return_sample_std": round(overall, 6),
+        "observations": len(p),
+        "return_count": len(log_ret),
+        "rolling_window": w,
+        "rolling_volatility": rolling,
+        "note": "Commodity price volatility proxy from priceHistory (not FX).",
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }

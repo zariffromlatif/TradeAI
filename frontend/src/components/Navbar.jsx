@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
-import { BarChart2, TrendingUp, GitCompare, Bell } from "lucide-react";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { BarChart2, TrendingUp, GitCompare, Bell, Package, Shield, ClipboardList, Sparkles, Calculator, LineChart as LineChartIcon, Lightbulb } from "lucide-react";
 
 const API = "http://localhost:5000/api";
 
@@ -20,6 +20,41 @@ function Navbar() {
       to: "/compare",
       label: "Compare",
       icon: <GitCompare size={16} />,
+    },
+    {
+      to: "/forecasts",
+      label: "Forecasts",
+      icon: <LineChartIcon size={16} />,
+    },
+    {
+      to: "/advisory",
+      label: "Advisory",
+      icon: <Lightbulb size={16} />,
+    },
+    {
+      to: "/sim",
+      label: "Simulate",
+      icon: <Calculator size={16} />,
+    },
+    {
+      to: "/orders",
+      label: "Orders",
+      icon: <Package size={16} />,
+    },
+    {
+      to: "/risk",
+      label: "Risk score",
+      icon: <Shield size={16} />,
+    },
+    {
+      to: "/risk/breakdown",
+      label: "Risk explain",
+      icon: <ClipboardList size={16} />,
+    },
+    {
+      to: "/premium",
+      label: "Premium",
+      icon: <Sparkles size={16} />,
     },
   ];
 

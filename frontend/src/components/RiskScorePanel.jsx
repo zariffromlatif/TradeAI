@@ -221,7 +221,7 @@ export default function RiskScorePanel() {
         {/* Header */}
         <div className="mb-8">
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">
-            Module 2 · FR8 + FR9
+            Automated risk analysis
           </div>
           <h1 className="text-3xl font-bold text-white">
             Country Risk <span className="text-violet-400">Scoring</span>
@@ -469,14 +469,13 @@ export default function RiskScorePanel() {
               </div>
             )}
 
-            {/* Tab: Indicator Breakdown (FR9 - Interpretability Panel) */}
             {activeTab === "breakdown" && (
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
                 <h3 className="text-sm text-gray-400 mb-1 uppercase tracking-wider">
                   Risk Interpretability Panel
                 </h3>
                 <p className="text-xs text-gray-600 mb-4">
-                  FR9 — per-indicator breakdown with scoring rationale.
+                  Per-indicator breakdown with scoring rationale.
                 </p>
                 <div className="space-y-3">
                   {result.indicator_breakdown.map((b) => {

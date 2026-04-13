@@ -42,6 +42,9 @@ app.use("/api/trade", require("./routes/trade"));
 app.use("/api/analytics", require("./routes/analytics"));
 app.use("/api/orders", require("./routes/orders"));
 app.use("/api/payment", require("./routes/payment"));
+app.use("/api/sim", require("./routes/simulation"));
+app.use("/api/reports", require("./routes/reports"));
+app.use("/api/advisory", require("./routes/advisory"));
 
 // Start Server
 const PORT = process.env.PORT || 5000;

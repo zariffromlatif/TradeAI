@@ -3,47 +3,17 @@ const router = express.Router();
 const TradeRecord = require("../models/TradeRecord");
 const Country = require("../models/Country");
 const axios = require("axios");
+const { getDashboardAggregates } = require("../services/dashboardStats");
+const Commodity = require("../models/Commodity");
+const { getMonthlyVolumeSeries } = require("../services/forecastData");
 
 const ML_BASE = "http://127.0.0.1:8000";
 
 // GET /api/analytics/dashboard
 router.get("/dashboard", async (req, res) => {
   try {
-    const exportStats = await TradeRecord.aggregate([
-      { $match: { type: "export" } },
-      { $group: { _id: "$country", totalExportValue: { $sum: "$value" } } },
-      { $sort: { totalExportValue: -1 } },
-      { $limit: 5 },
-      {
-        $lookup: {
-          from: "countries",
-          localField: "_id",
-          foreignField: "_id",
-          as: "countryInfo",
-        },
-      },
-      { $unwind: "$countryInfo" },
-      { $project: { country: "$countryInfo.name", totalExportValue: 1 } },
-    ]);
-
-    const importStats = await TradeRecord.aggregate([
-      { $match: { type: "import" } },
-      { $group: { _id: "$country", totalImportValue: { $sum: "$value" } } },
-      { $sort: { totalImportValue: -1 } },
-      { $limit: 5 },
-      {
-        $lookup: {
-          from: "countries",
-          localField: "_id",
-          foreignField: "_id",
-          as: "countryInfo",
-        },
-      },
-      { $unwind: "$countryInfo" },
-      { $project: { country: "$countryInfo.name", totalImportValue: 1 } },
-    ]);
-
-    res.json({ topExporters: exportStats, topImporters: importStats });
+    const { topExporters, topImporters } = await getDashboardAggregates();
+    res.json({ topExporters, topImporters });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -286,8 +256,69 @@ router.post("/risk-score/batch", async (req, res) => {
     res.status(500).json({ message: "ML Service batch endpoint unreachable" });
   }
 });
-module.exports = router;
 
+// POST /api/analytics/forecast/volume — F7: monthly volume → ML forecast
+router.post("/forecast/volume", async (req, res) => {
+  try {
+    const { commodity, country, type = "export", horizon = 1 } = req.body;
+    if (!commodity) {
+      return res.status(400).json({ message: "commodity (ObjectId) is required" });
+    }
+    const series = await getMonthlyVolumeSeries({
+      commodityId: commodity,
+      countryId: country || null,
+      type,
+    });
+    if (!series.length) {
+      return res.status(400).json({ message: "No trade rows for this filter" });
+    }
+    const values = series.map((s) => s.totalVolume);
+    const h = Math.min(12, Math.max(1, Number(horizon) || 1));
+    const response = await axios.post(`${ML_BASE}/api/forecast/trade-volume`, {
+      values,
+      horizon: h,
+    });
+    res.json({ ...response.data, series });
+  } catch (err) {
+    const msg =
+      err.response?.data?.detail ||
+      err.response?.data?.message ||
+      err.message ||
+      "Forecast failed";
+    res.status(err.response?.status || 500).json({ message: String(msg) });
+  }
+});
+
+// POST /api/analytics/forecast/price-volatility — F7: priceHistory → volatility proxy
+router.post("/forecast/price-volatility", async (req, res) => {
+  try {
+    const { commodity } = req.body;
+    if (!commodity) {
+      return res.status(400).json({ message: "commodity (ObjectId) is required" });
+    }
+    const doc = await Commodity.findById(commodity).select("name priceHistory");
+    if (!doc) return res.status(404).json({ message: "Commodity not found" });
+    const prices = [...(doc.priceHistory || [])]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((p) => p.price);
+    if (prices.length < 3) {
+      return res
+        .status(400)
+        .json({ message: "Need at least 3 price history points" });
+    }
+    const response = await axios.post(`${ML_BASE}/api/forecast/price-volatility`, {
+      prices,
+    });
+    res.json({ ...response.data, commodityName: doc.name });
+  } catch (err) {
+    const msg =
+      err.response?.data?.detail ||
+      err.response?.data?.message ||
+      err.message ||
+      "Volatility failed";
+    res.status(err.response?.status || 500).json({ message: String(msg) });
+  }
+});
 
 
 // GET /api/analytics/compare
@@ -374,3 +405,4 @@ router.get("/compare", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+module.exports = router;

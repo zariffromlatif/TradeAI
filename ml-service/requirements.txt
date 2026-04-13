@@ -1,2 +1,10 @@
-fastapi
-uvicorn
+# TradeAI ML service — pin for reproducible installs across machines.
+# Python 3.10+ (3.13 supported by these pins).
+#
+# Install:  pip install -r requirements.txt
+# Run:      python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+numpy==2.2.2
+scikit-learn==1.6.1

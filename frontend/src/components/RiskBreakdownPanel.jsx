@@ -368,7 +368,7 @@ export default function RiskBreakdownPanel() {
         {/* Header */}
         <div className="mb-8">
           <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">
-            Module 2 · FR9
+            Indicator breakdown
           </div>
           <h1 className="text-3xl font-bold">
             Risk <span className="text-violet-400">Interpretability</span> Panel

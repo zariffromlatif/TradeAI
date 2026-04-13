@@ -9,7 +9,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
-import { Globe, TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { Globe, TrendingUp, TrendingDown, Activity, FileDown } from "lucide-react";
 import StatCard from "../components/StatCard";
 
 const API = "http://localhost:5000/api";
@@ -20,6 +20,31 @@ function Dashboard() {
     topImporters: [],
   });
   const [loading, setLoading] = useState(true);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState("");
+
+  const downloadTradeSummaryPdf = async () => {
+    setPdfError("");
+    setPdfLoading(true);
+    try {
+      const res = await axios.get(`${API}/reports/trade-summary`, {
+        responseType: "blob",
+      });
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "tradeai-trade-summary.pdf";
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setPdfError(
+        err.response?.data?.message || err.message || "PDF download failed.",
+      );
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   useEffect(() => {
     axios
@@ -33,9 +58,23 @@ function Dashboard() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-white">
-        Trade Intelligence Dashboard
-      </h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-2xl font-bold text-white">
+          Trade Intelligence Dashboard
+        </h1>
+        <button
+          type="button"
+          onClick={downloadTradeSummaryPdf}
+          disabled={pdfLoading}
+          className="inline-flex items-center justify-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
+        >
+          <FileDown size={18} className="text-emerald-400" />
+          {pdfLoading ? "Preparing PDF…" : "Download PDF report"}
+        </button>
+      </div>
+      {pdfError && (
+        <p className="text-sm text-red-400">{pdfError}</p>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
