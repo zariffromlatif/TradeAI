@@ -99,39 +99,39 @@ function Forecasts() {
       : [];
 
   if (loading) {
-    return <p className="text-gray-400">Loading…</p>;
+    return <p className="text-neutral-400">Loading…</p>;
   }
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex items-center gap-3">
-        <LineChartIcon className="text-emerald-400" size={28} />
+        <LineChartIcon className="text-[#8ab4ff]" size={28} />
         <div>
-          <h1 className="text-2xl font-bold text-white">Forecasts</h1>
-          <p className="text-gray-400 text-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Forecasts</h1>
+          <p className="text-neutral-400 text-sm">
             Trade volume projection from records; volatility from commodity{" "}
-            <code className="text-emerald-400">priceHistory</code> (proxy, not
+            <code className="text-[#8ab4ff]">priceHistory</code> (proxy, not
             FX).
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
 
       <form
         onSubmit={runForecast}
-        className="bg-gray-900 border border-gray-800 rounded-xl p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
       >
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-400">Commodity</span>
+          <span className="text-neutral-400">Commodity</span>
           <select
             value={commodity}
             onChange={(e) => setCommodity(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
             required
           >
             {commodities.map((c) => (
@@ -142,11 +142,11 @@ function Forecasts() {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-400">Country (optional)</span>
+          <span className="text-neutral-400">Country (optional)</span>
           <select
             value={country}
             onChange={(e) => setCountry(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
           >
             <option value="">All countries</option>
             {countries.map((c) => (
@@ -157,32 +157,32 @@ function Forecasts() {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-400">Trade type</span>
+          <span className="text-neutral-400">Trade type</span>
           <select
             value={tradeType}
             onChange={(e) => setTradeType(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
           >
             <option value="export">Export</option>
             <option value="import">Import</option>
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-gray-400">Forecast horizon (months)</span>
+          <span className="text-neutral-400">Forecast horizon (months)</span>
           <input
             type="number"
             min={1}
             max={12}
             value={horizon}
             onChange={(e) => setHorizon(e.target.value)}
-            className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
           />
         </label>
         <div className="flex items-end sm:col-span-2 lg:col-span-4">
           <button
             type="submit"
             disabled={running}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium px-6 py-2 rounded-lg"
+            className="btn-ui btn-primary"
           >
             {running ? "Running…" : "Run forecast"}
           </button>
@@ -190,14 +190,14 @@ function Forecasts() {
       </form>
 
       {volumeResult && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-2">
-          <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-            <Activity size={20} className="text-emerald-400" />
+        <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-2">
+          <h2 className="text-lg font-semibold text-neutral-100 flex items-center gap-2">
+            <Activity size={20} className="text-[#8ab4ff]" />
             Volume forecast
           </h2>
-          <p className="text-gray-400 text-sm">
+          <p className="text-neutral-400 text-sm">
             Method:{" "}
-            <code className="text-emerald-400">{volumeResult.method}</code>
+            <code className="text-[#8ab4ff]">{volumeResult.method}</code>
             {volumeResult.note ? ` — ${volumeResult.note}` : ""}
           </p>
           {chartRows.length > 0 && (
@@ -206,23 +206,23 @@ function Forecasts() {
                 <LineChart data={chartRows}>
                   <XAxis
                     dataKey="label"
-                    tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                    tick={{ fill: "#a3a3a3", fontSize: 11 }}
                   />
-                  <YAxis tick={{ fill: "#9CA3AF", fontSize: 11 }} />
+                  <YAxis tick={{ fill: "#a3a3a3", fontSize: 11 }} />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#1F2937",
-                      border: "none",
-                      color: "#fff",
+                      backgroundColor: "#111111",
+                      border: "1px solid #2a2a2a",
+                      color: "#f5f5f5",
                     }}
                   />
-                  <Legend />
+                  <Legend wrapperStyle={{ color: "#d4d4d4" }} />
                   <Line
                     type="monotone"
                     dataKey="volume"
                     name="Volume (units / month)"
-                    stroke="#34D399"
-                    strokeWidth={2}
+                    stroke="#8ab4ff"
+                    strokeWidth={2.25}
                     dot={{ r: 3 }}
                   />
                 </LineChart>
@@ -233,20 +233,20 @@ function Forecasts() {
       )}
 
       {volResult && (
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-3">
-          <h2 className="text-lg font-semibold text-white">
+        <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-3">
+          <h2 className="text-lg font-semibold text-neutral-100">
             Price volatility proxy
           </h2>
-          <p className="text-gray-400 text-sm">
+          <p className="text-neutral-400 text-sm">
             {volResult.commodityName && (
               <>
                 Commodity:{" "}
-                <span className="text-white">{volResult.commodityName}</span>
+                <span className="text-neutral-100">{volResult.commodityName}</span>
                 <br />
               </>
             )}
             Sample std (log returns):{" "}
-            <code className="text-emerald-400">
+            <code className="text-[#8ab4ff]">
               {volResult.log_return_sample_std}
             </code>
             <br />
@@ -254,7 +254,7 @@ function Forecasts() {
             {volResult.return_count}
           </p>
           {volResult.rolling_volatility?.length > 0 && (
-            <p className="text-gray-500 text-xs">
+            <p className="text-neutral-500 text-xs">
               Last rolling vol:{" "}
               {
                 volResult.rolling_volatility[
@@ -263,7 +263,7 @@ function Forecasts() {
               }
             </p>
           )}
-          <p className="text-gray-600 text-xs">{volResult.note}</p>
+          <p className="text-neutral-600 text-xs">{volResult.note}</p>
         </div>
       )}
     </div>

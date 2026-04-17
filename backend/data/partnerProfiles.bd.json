@@ -1,0 +1,157 @@
+[
+  {
+    "reporterCode": "BD",
+    "partnerCode": "CN",
+    "partnerName": "China",
+    "relationshipRole": "import_dominant",
+    "imports": [
+      "Industrial machinery and equipment",
+      "Electronics and electrical goods",
+      "Textile machinery and synthetic fibers",
+      "Chemicals and plastics"
+    ],
+    "exports": [
+      "Ready-made garments",
+      "Leather goods",
+      "Jute products"
+    ],
+    "insights": [
+      "China is Bangladesh's top import partner and a core industrial supply source.",
+      "This relationship is production dependency oriented: Bangladesh imports upstream inputs and exports finished goods."
+    ],
+    "stats": [
+      {
+        "metric": "import_share_percent",
+        "minValue": 25,
+        "maxValue": 35,
+        "period": "latest_available",
+        "source": "curated_user_input",
+        "sourceUrl": null,
+        "asOf": null
+      }
+    ],
+    "sourceType": "curated",
+    "verified": false
+  },
+  {
+    "reporterCode": "BD",
+    "partnerCode": "IN",
+    "partnerName": "India",
+    "relationshipRole": "import_dominant",
+    "imports": [
+      "Cotton",
+      "Petroleum products",
+      "Food grains (rice, wheat)",
+      "Chemicals"
+    ],
+    "exports": [
+      "Fish",
+      "Garments",
+      "Cement",
+      "Plastic goods"
+    ],
+    "insights": [
+      "Trade intensity is strengthened by proximity and land-border logistics.",
+      "India is a strategic partner for both goods and regional energy linkages."
+    ],
+    "stats": [],
+    "sourceType": "curated",
+    "verified": false
+  },
+  {
+    "reporterCode": "BD",
+    "partnerCode": "US",
+    "partnerName": "United States",
+    "relationshipRole": "export_dominant",
+    "imports": [
+      "Machinery",
+      "Agricultural products",
+      "Chemicals"
+    ],
+    "exports": [
+      "Ready-made garments",
+      "Footwear",
+      "Home textiles"
+    ],
+    "insights": [
+      "The US is Bangladesh's leading export market, largely driven by apparel.",
+      "This market is central to Bangladesh's foreign-currency earnings."
+    ],
+    "stats": [
+      {
+        "metric": "export_share_percent",
+        "minValue": 15,
+        "maxValue": null,
+        "period": "latest_available",
+        "source": "curated_user_input",
+        "sourceUrl": null,
+        "asOf": null
+      }
+    ],
+    "sourceType": "curated",
+    "verified": false
+  },
+  {
+    "reporterCode": "BD",
+    "partnerCode": "DE",
+    "partnerName": "Germany",
+    "relationshipRole": "export_dominant",
+    "imports": [
+      "Industrial machinery",
+      "Vehicles",
+      "Chemicals"
+    ],
+    "exports": [
+      "Garments",
+      "Knitwear",
+      "Textiles"
+    ],
+    "insights": [
+      "Germany is among the largest EU destinations for Bangladeshi garments."
+    ],
+    "stats": [],
+    "sourceType": "curated",
+    "verified": false
+  },
+  {
+    "reporterCode": "BD",
+    "partnerCode": "GB",
+    "partnerName": "United Kingdom",
+    "relationshipRole": "export_dominant",
+    "imports": [
+      "Pharmaceuticals",
+      "Machinery"
+    ],
+    "exports": [
+      "Clothing and apparel",
+      "Leather goods"
+    ],
+    "insights": [
+      "Historical and diaspora links contribute to sustained bilateral trade demand."
+    ],
+    "stats": [],
+    "sourceType": "curated",
+    "verified": false
+  },
+  {
+    "reporterCode": "BD",
+    "partnerCode": "AE",
+    "partnerName": "United Arab Emirates",
+    "relationshipRole": "hub",
+    "imports": [
+      "Petroleum products",
+      "Gold",
+      "Chemicals"
+    ],
+    "exports": [
+      "Food products",
+      "Garments"
+    ],
+    "insights": [
+      "UAE functions as both direct partner and re-export hub in global trade routing."
+    ],
+    "stats": [],
+    "sourceType": "curated",
+    "verified": false
+  }
+]

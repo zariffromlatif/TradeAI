@@ -5,6 +5,8 @@ async function getMonthlyVolumeSeries({ commodityId, countryId, type }) {
   const match = {
     commodity: new mongoose.Types.ObjectId(commodityId),
     type: type === "import" ? "import" : "export",
+    isVerified: true,
+    source: { $in: ["un_comtrade", "official_api"] },
   };
   if (countryId) match.country = new mongoose.Types.ObjectId(countryId);
 

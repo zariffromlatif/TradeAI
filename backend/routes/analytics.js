@@ -3,17 +3,23 @@ const router = express.Router();
 const TradeRecord = require("../models/TradeRecord");
 const Country = require("../models/Country");
 const axios = require("axios");
+const PartnerProfile = require("../models/PartnerProfile");
 const { getDashboardAggregates } = require("../services/dashboardStats");
 const Commodity = require("../models/Commodity");
 const { getMonthlyVolumeSeries } = require("../services/forecastData");
 
 const ML_BASE = "http://127.0.0.1:8000";
+const REAL_TRADE_MATCH = {
+  isVerified: true,
+  source: { $in: ["un_comtrade", "official_api"] },
+};
 
 // GET /api/analytics/dashboard
 router.get("/dashboard", async (req, res) => {
   try {
-    const { topExporters, topImporters } = await getDashboardAggregates();
-    res.json({ topExporters, topImporters });
+    const { topExporters, topImporters, countriesTracked, tradeRecordCount } =
+      await getDashboardAggregates();
+    res.json({ topExporters, topImporters, countriesTracked, tradeRecordCount });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -26,6 +32,7 @@ router.get("/trade-balance", async (req, res) => {
     
     // Build the aggregation pipeline
     const pipeline = [
+      { $match: REAL_TRADE_MATCH },
       {
         $lookup: {
           from: "countries",
@@ -121,7 +128,7 @@ router.get("/country/:code", async (req, res) => {
 
     if (!monthly) {
       const byType = await TradeRecord.aggregate([
-        { $match: { country: country._id } },
+        { $match: { ...REAL_TRADE_MATCH, country: country._id } },
         {
           $group: {
             _id: "$type",
@@ -163,7 +170,7 @@ router.get("/country/:code", async (req, res) => {
     }
 
     const series = await TradeRecord.aggregate([
-      { $match: { country: country._id } },
+      { $match: { ...REAL_TRADE_MATCH, country: country._id } },
       {
         $group: {
           _id: {
@@ -342,6 +349,7 @@ router.get("/compare", async (req, res) => {
     const matchStage = {
       country: { $in: [cA._id, cB._id] },
       type: type,
+      ...REAL_TRADE_MATCH,
     };
 
     // If a specific commodity was selected, add it to the filter
@@ -405,4 +413,42 @@ router.get("/compare", async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 });
+
+// GET /api/analytics/partners/:reporterCode
+router.get("/partners/:reporterCode", async (req, res) => {
+  try {
+    const reporterCode = req.params.reporterCode.toUpperCase();
+
+    const data = await PartnerProfile.find({ reporterCode })
+      .sort({ partnerName: 1 })
+      .lean();
+
+    const verifiedCount = data.filter((x) => x.verified).length;
+    const unverifiedCount = data.length - verifiedCount;
+
+    const allAsOf = data
+      .flatMap((x) => (x.stats || []).map((s) => s.asOf))
+      .filter(Boolean)
+      .map((d) => new Date(d).getTime())
+      .filter(Number.isFinite);
+
+    const lastVerifiedAt = allAsOf.length
+      ? new Date(Math.max(...allAsOf)).toISOString()
+      : null;
+
+    return res.json({
+      reporterCode,
+      count: data.length,
+      sourceType: data.length ? "curated" : null,
+      coverageStatus: data.length ? "curated_only" : "none",
+      verifiedCount,
+      unverifiedCount,
+      lastVerifiedAt,
+      data,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;

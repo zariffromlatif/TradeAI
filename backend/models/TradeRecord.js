@@ -16,6 +16,11 @@ const TradeRecordSchema = new mongoose.Schema(
     volume: { type: Number }, // quantity in units
     value: { type: Number }, // total value in USD
     date: { type: Date, required: true },
+    source: { type: String, default: null },
+    sourceUrl: { type: String, default: null },
+    asOf: { type: Date, default: null },
+    ingestedAt: { type: Date, default: null },
+    isVerified: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

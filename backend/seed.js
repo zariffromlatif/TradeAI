@@ -73,6 +73,8 @@ async function seed() {
             volume: Math.floor(Math.random() * 10000) + 1000,
             value: Math.floor(Math.random() * 5000000) + 100000,
             date,
+            source: "seed_demo",
+            isVerified: false,
           });
         }
       }

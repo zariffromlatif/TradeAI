@@ -3,6 +3,19 @@ const { body, param, validationResult } = require("express-validator");
 const express = require("express");
 const router = express.Router();
 const Commodity = require("../models/Commodity");
+const STALE_HOURS = 24;
+
+function withFreshnessMeta(commodityDoc) {
+  const row = commodityDoc.toObject ? commodityDoc.toObject() : commodityDoc;
+  const asOfMs = row.asOf ? new Date(row.asOf).getTime() : NaN;
+  const isStale =
+    !Number.isFinite(asOfMs) ||
+    Date.now() - asOfMs > STALE_HOURS * 60 * 60 * 1000;
+  return {
+    ...row,
+    isStale,
+  };
+}
 
 function handleValidation(req, res, next) {
   const errors = validationResult(req);
@@ -14,7 +27,7 @@ function handleValidation(req, res, next) {
 router.get("/", async (req, res) => {
   try {
     const commodities = await Commodity.find();
-    res.json(commodities);
+    res.json(commodities.map(withFreshnessMeta));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -26,7 +39,7 @@ router.get("/:id", async (req, res) => {
     const commodity = await Commodity.findById(req.params.id);
     if (!commodity)
       return res.status(404).json({ message: "Commodity not found" });
-    res.json(commodity);
+    res.json(withFreshnessMeta(commodity));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

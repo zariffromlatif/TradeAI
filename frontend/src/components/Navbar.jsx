@@ -38,7 +38,7 @@ function Navbar() {
     },
     {
       to: "/orders",
-      label: "Orders",
+      label: "Marketplace",
       icon: <Package size={16} />,
     },
     {
@@ -58,7 +58,7 @@ function Navbar() {
     },
   ];
 
-  // Poll every 30 seconds just to check if the red badge should be visible
+  // Poll every 30 seconds to update anomaly indicator.
   useEffect(() => {
     const checkAnomalies = async () => {
       try {
@@ -75,10 +75,10 @@ function Navbar() {
   }, []);
 
   return (
-    <nav className="bg-gray-900 border-b border-gray-800 px-6 py-4 flex items-center justify-between z-50 relative">
+    <nav className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-[#202020] px-6 py-4 flex items-center justify-between relative">
       <div className="flex items-center gap-2">
-        <span className="text-emerald-400 font-bold text-xl">TradeAI</span>
-        <span className="text-gray-500 text-sm">Global Trade Analytics</span>
+        <span className="text-[#8ab4ff] font-semibold tracking-tight text-xl">TradeAI</span>
+        <span className="text-neutral-500 text-sm">Global Trade Analytics</span>
       </div>
       
       <div className="flex items-center gap-6">
@@ -88,8 +88,8 @@ function Navbar() {
             to={link.to}
             className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${
               location.pathname === link.to
-                ? "text-emerald-400"
-                : "text-gray-400 hover:text-white"
+                ? "text-[#8ab4ff]"
+                : "text-neutral-400 hover:text-neutral-100"
             }`}
           >
             {link.icon}
@@ -97,15 +97,15 @@ function Navbar() {
           </Link>
         ))}
 
-        <div className="w-px h-5 bg-gray-800"></div>
+        <div className="w-px h-5 bg-[#2a2a2a]" />
 
         {/* Dedicated Alerts Page Link */}
         <Link
           to="/alerts"
           className={`relative p-2 transition-colors rounded-lg ${
             location.pathname === "/alerts"
-              ? "text-emerald-400 bg-gray-800"
-              : "text-gray-400 hover:text-white hover:bg-gray-800"
+              ? "text-[#8ab4ff] bg-[#171717] border border-[#2a2a2a]"
+              : "text-neutral-400 hover:text-neutral-100 hover:bg-[#171717]"
           }`}
         >
           <Bell size={20} />

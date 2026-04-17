@@ -5,7 +5,7 @@ import { Calculator } from "lucide-react";
 const API = "http://localhost:5000/api";
 
 const inputClass =
-  "bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white w-full";
+  "bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 w-full";
 
 function Simulation() {
   const [tab, setTab] = useState("profit");
@@ -85,10 +85,10 @@ function Simulation() {
         setTab(id);
         setError("");
       }}
-      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+      className={`btn-ui ${
         tab === id
-          ? "bg-emerald-600 text-white"
-          : "bg-gray-800 text-gray-400 hover:text-white"
+          ? "bg-[#8ab4ff] text-black"
+          : "bg-[#171717] text-neutral-400 hover:text-neutral-100"
       }`}
     >
       {label}
@@ -98,10 +98,10 @@ function Simulation() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Calculator className="text-emerald-400" size={28} />
+        <Calculator className="text-[#8ab4ff]" size={28} />
         <div>
-          <h1 className="text-2xl font-bold text-white">Trade simulations</h1>
-          <p className="text-gray-400 text-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Trade simulations</h1>
+          <p className="text-neutral-400 text-sm">
             Margin and landed-cost calculators (illustrative formulas, not tax
             or legal advice).
           </p>
@@ -114,7 +114,7 @@ function Simulation() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
@@ -122,13 +122,13 @@ function Simulation() {
       {tab === "profit" && (
         <form
           onSubmit={runProfitability}
-          className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4"
+          className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-4"
         >
-          <p className="text-gray-400 text-sm">
-            <code className="text-emerald-400">tariffRate</code> is 0–1 (e.g.{" "}
-            <code className="text-emerald-400">0.05</code> = 5%) on purchase
+          <p className="text-neutral-400 text-sm">
+            <code className="text-[#8ab4ff]">tariffRate</code> is 0–1 (e.g.{" "}
+            <code className="text-[#8ab4ff]">0.05</code> = 5%) on purchase
             value (
-            <code className="text-emerald-400">quantity × unitCostUsd</code>).
+            <code className="text-[#8ab4ff]">quantity × unitCostUsd</code>).
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
@@ -139,7 +139,7 @@ function Simulation() {
               ["otherCostsUsd", "Other costs (USD, total)"],
             ].map(([key, label]) => (
               <label key={key} className="flex flex-col gap-1 text-sm">
-                <span className="text-gray-400">{label}</span>
+                <span className="text-neutral-400">{label}</span>
                 <input
                   className={inputClass}
                   value={profitForm[key]}
@@ -154,16 +154,16 @@ function Simulation() {
           <button
             type="submit"
             disabled={loadingProfit}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg"
+            className="btn-ui btn-primary w-full"
           >
             {loadingProfit ? "Calculating…" : "Calculate margin"}
           </button>
           {profitResult && (
-            <div className="mt-4 rounded-lg border border-gray-700 bg-gray-950/50 p-4 text-sm space-y-2">
-              <h3 className="text-white font-semibold">Result</h3>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+            <div className="mt-4 rounded-xl border border-[#2a2a2a] bg-[#171717] p-4 text-sm space-y-2">
+              <h3 className="text-neutral-100 font-semibold">Result</h3>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-neutral-300">
                 <dt>Revenue (USD)</dt>
-                <dd className="text-right text-white">
+                <dd className="text-right text-neutral-100">
                   {profitResult.breakdown.revenueUsd.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}
@@ -204,8 +204,8 @@ function Simulation() {
                     },
                   )}
                 </dd>
-                <dt className="text-emerald-400">Net margin (USD)</dt>
-                <dd className="text-right text-emerald-400 font-medium">
+                <dt className="text-[#8ab4ff]">Net margin (USD)</dt>
+                <dd className="text-right text-[#8ab4ff] font-medium">
                   {profitResult.breakdown.netMarginUsd.toLocaleString(
                     undefined,
                     {
@@ -218,7 +218,7 @@ function Simulation() {
                   {profitResult.breakdown.marginPercent}%
                 </dd>
               </dl>
-              <p className="text-gray-500 text-xs pt-2">{profitResult.note}</p>
+              <p className="text-neutral-500 text-xs pt-2">{profitResult.note}</p>
             </div>
           )}
         </form>
@@ -227,9 +227,9 @@ function Simulation() {
       {tab === "landed" && (
         <form
           onSubmit={runLanded}
-          className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4"
+          className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-4"
         >
-          <p className="text-gray-400 text-sm">
+          <p className="text-neutral-400 text-sm">
             CIF = FOB + freight + insurance. Duty applies to CIF. Leave FX empty
             to skip local settlement lines.
           </p>
@@ -242,7 +242,7 @@ function Simulation() {
               ["dutyRate", "Duty rate on CIF (0–1)"],
             ].map(([key, label]) => (
               <label key={key} className="flex flex-col gap-1 text-sm">
-                <span className="text-gray-400">{label}</span>
+                <span className="text-neutral-400">{label}</span>
                 <input
                   className={inputClass}
                   value={landedForm[key]}
@@ -254,7 +254,7 @@ function Simulation() {
               </label>
             ))}
             <label className="flex flex-col gap-1 text-sm sm:col-span-2">
-              <span className="text-gray-400">
+              <span className="text-neutral-400">
                 FX rate (optional, local per 1 USD)
               </span>
               <input
@@ -270,16 +270,16 @@ function Simulation() {
           <button
             type="submit"
             disabled={loadingLanded}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-medium py-2 rounded-lg"
+            className="btn-ui btn-primary w-full"
           >
             {loadingLanded ? "Calculating…" : "Calculate landed cost"}
           </button>
           {landedResult && (
-            <div className="mt-4 rounded-lg border border-gray-700 bg-gray-950/50 p-4 text-sm space-y-2">
-              <h3 className="text-white font-semibold">Result</h3>
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-gray-300">
+            <div className="mt-4 rounded-xl border border-[#2a2a2a] bg-[#171717] p-4 text-sm space-y-2">
+              <h3 className="text-neutral-100 font-semibold">Result</h3>
+              <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-neutral-300">
                 <dt>CIF (USD)</dt>
-                <dd className="text-right text-white">
+                <dd className="text-right text-neutral-100">
                   {landedResult.breakdown.cifUsd.toLocaleString(undefined, {
                     maximumFractionDigits: 2,
                   })}
@@ -291,7 +291,7 @@ function Simulation() {
                   })}
                 </dd>
                 <dt>Landed total (USD)</dt>
-                <dd className="text-right font-medium text-white">
+                <dd className="text-right font-medium text-neutral-100">
                   {landedResult.breakdown.landedTotalUsd.toLocaleString(
                     undefined,
                     {
@@ -300,7 +300,7 @@ function Simulation() {
                   )}
                 </dd>
                 <dt>Landed / unit (USD)</dt>
-                <dd className="text-right font-medium text-emerald-400">
+                <dd className="text-right font-medium text-[#8ab4ff]">
                   {landedResult.breakdown.landedPerUnitUsd.toLocaleString(
                     undefined,
                     {
@@ -327,7 +327,7 @@ function Simulation() {
                   </>
                 )}
               </dl>
-              <p className="text-gray-500 text-xs pt-2">{landedResult.note}</p>
+              <p className="text-neutral-500 text-xs pt-2">{landedResult.note}</p>
             </div>
           )}
         </form>

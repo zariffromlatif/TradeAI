@@ -15,22 +15,34 @@ const API = "http://localhost:5000/api";
 function CommodityTrends() {
   const [commodities, setCommodities] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [selectedDetails, setSelectedDetails] = useState(null);
   const [priceHistory, setPriceHistory] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    axios.get(`${API}/commodities`).then((res) => {
-      setCommodities(res.data);
-      if (res.data.length > 0) setSelected(res.data[0]);
-    });
+    axios
+      .get(`${API}/commodities`)
+      .then((res) => {
+        setCommodities(res.data);
+        if (res.data.length > 0) {
+          setSelected(res.data[0]);
+          setSelectedDetails(res.data[0]);
+        }
+      })
+      .catch((err) => {
+        setError(err.response?.data?.message || "Failed to load commodities.");
+      });
   }, []);
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
+    setError("");
     axios
       .get(`${API}/commodities/${selected._id}`)
       .then((res) => {
+        setSelectedDetails(res.data);
         const history = res.data.priceHistory.map((p) => ({
           date: new Date(p.date).toLocaleDateString("en-US", {
             month: "short",
@@ -40,13 +52,18 @@ function CommodityTrends() {
         }));
         setPriceHistory(history);
       })
-      .catch((err) => console.error(err))
+      .catch((err) => {
+        setError(err.response?.data?.message || "Failed to load commodity.");
+      })
       .finally(() => setLoading(false));
   }, [selected]);
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-white">Commodity Price Trends</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">
+        Commodity Price Trends
+      </h1>
+      {error && <p className="text-sm text-red-300">{error}</p>}
 
       {/* Commodity Selector */}
       <div className="flex flex-wrap gap-3">
@@ -54,10 +71,10 @@ function CommodityTrends() {
           <button
             key={c._id}
             onClick={() => setSelected(c)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            className={`btn-ui border ${
               selected?._id === c._id
-                ? "bg-emerald-500 border-emerald-500 text-white"
-                : "bg-gray-900 border-gray-700 text-gray-400 hover:text-white"
+                ? "bg-[#8ab4ff] border-[#8ab4ff] text-black"
+                : "bg-[#121212] border-[#2a2a2a] text-neutral-400 hover:text-neutral-100"
             }`}
           >
             {c.name}
@@ -66,52 +83,71 @@ function CommodityTrends() {
       </div>
 
       {/* Chart */}
-      <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-        {selected && (
+      <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
+        {selectedDetails && (
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-white font-semibold">
-              {selected.name} — Price History
+            <h2 className="text-neutral-100 font-semibold">
+              {selectedDetails.name} — Price History
             </h2>
-            <div className="flex gap-4 text-sm text-gray-400">
+            <div className="flex gap-4 text-sm text-neutral-400">
               <span>
                 Category:{" "}
-                <span className="text-white">{selected.category}</span>
+                <span className="text-neutral-100">{selectedDetails.category}</span>
               </span>
               <span>
-                Unit: <span className="text-white">{selected.unit}</span>
+                Unit: <span className="text-neutral-100">{selectedDetails.unit}</span>
               </span>
               <span>
                 Current:{" "}
-                <span className="text-emerald-400 font-bold">
-                  ${selected.currentPrice}
+                <span className="text-[#8ab4ff] font-semibold">
+                  ${selectedDetails.currentPrice}
+                </span>
+              </span>
+              <span>
+                Status:{" "}
+                <span
+                  className={`font-semibold ${
+                    selectedDetails.isStale ? "text-amber-300" : "text-[#8ab4ff]"
+                  }`}
+                >
+                  {selectedDetails.isStale ? "Stale" : "Fresh"}
                 </span>
               </span>
             </div>
           </div>
         )}
+        {selectedDetails && (
+          <p className="text-xs text-neutral-400 mb-4">
+            Source: {selectedDetails.source || "unknown"} | Verified:{" "}
+            {selectedDetails.verified ? "Yes" : "No"}
+            {selectedDetails.asOf
+              ? ` | As of: ${new Date(selectedDetails.asOf).toLocaleString()}`
+              : ""}
+          </p>
+        )}
 
         {loading ? (
-          <p className="text-gray-400 text-center py-16">Loading chart...</p>
+          <p className="text-neutral-400 text-center py-16">Loading chart...</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={priceHistory}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="date" tick={{ fill: "#9CA3AF", fontSize: 12 }} />
-              <YAxis tick={{ fill: "#9CA3AF", fontSize: 12 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+              <XAxis dataKey="date" tick={{ fill: "#a3a3a3", fontSize: 12 }} />
+              <YAxis tick={{ fill: "#a3a3a3", fontSize: 12 }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1F2937",
-                  border: "none",
-                  color: "#fff",
+                  backgroundColor: "#111111",
+                  border: "1px solid #2a2a2a",
+                  color: "#f5f5f5",
                 }}
                 formatter={(v) => [`$${v}`, "Price"]}
               />
               <Line
                 type="monotone"
                 dataKey="price"
-                stroke="#34D399"
-                strokeWidth={2}
-                dot={{ fill: "#34D399", r: 3 }}
+                stroke="#8ab4ff"
+                strokeWidth={2.25}
+                dot={{ fill: "#8ab4ff", r: 3 }}
                 activeDot={{ r: 6 }}
               />
             </LineChart>

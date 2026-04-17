@@ -19,37 +19,37 @@ function Alerts() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <ShieldAlert className="text-red-500" size={28} />
-        <h1 className="text-2xl font-bold text-white">Risk Notifications</h1>
+        <ShieldAlert className="text-[#8ab4ff]" size={28} />
+        <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Risk Notifications</h1>
       </div>
 
-      <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+      <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl overflow-hidden">
         {loading ? (
-          <p className="text-gray-400 text-center py-16">Loading alerts...</p>
+          <p className="text-neutral-400 text-center py-16">Loading alerts...</p>
         ) : anomalies.length === 0 ? (
-          <p className="text-gray-400 text-center py-16">No active anomalies detected. System is operating normally.</p>
+          <p className="text-neutral-400 text-center py-16">No active anomalies detected. System is operating normally.</p>
         ) : (
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-[#2a2a2a]">
             {anomalies.map((alert) => (
-              <div key={alert._id} className="p-6 hover:bg-gray-800/30 transition-colors">
+              <div key={alert._id} className="p-6 hover:bg-[#171717] transition-colors">
                 <div className="flex items-start gap-4">
-                  <div className="bg-red-500/10 p-2 rounded-lg mt-1">
-                    <AlertTriangle className="text-red-400" size={20} />
+                  <div className="bg-[#8ab4ff]/10 border border-[#8ab4ff]/20 p-2 rounded-lg mt-1">
+                    <AlertTriangle className="text-[#8ab4ff]" size={20} />
                   </div>
                   <div>
-                    <h3 className="text-lg font-medium text-white mb-1">
+                    <h3 className="text-lg font-medium text-neutral-100 mb-1">
                       {alert.anomalyReason || "Suspicious Trade Volume Detected"}
                     </h3>
-                    <div className="text-sm text-gray-400 space-y-1">
+                    <div className="text-sm text-neutral-400 space-y-1">
                       <p>
-                        <span className="text-gray-300 font-medium capitalize">{alert.type}</span> order for 
-                        <span className="text-gray-300 font-medium"> {alert.commodity?.name}</span> associated with 
-                        <span className="text-gray-300 font-medium"> {alert.country?.name}</span>.
+                        <span className="text-neutral-300 font-medium capitalize">{alert.type}</span> order for 
+                        <span className="text-neutral-300 font-medium"> {alert.commodity?.name}</span> associated with 
+                        <span className="text-neutral-300 font-medium"> {alert.country?.name}</span>.
                       </p>
                       <p>
                         Quantity: {alert.quantity.toLocaleString()} | Total Value: ${(alert.totalValue).toLocaleString()}
                       </p>
-                      <p className="text-xs text-gray-500 mt-2">
+                      <p className="text-xs text-neutral-500 mt-2">
                         Detected: {new Date(alert.createdAt).toLocaleString()} | Order ID: {alert._id}
                       </p>
                     </div>

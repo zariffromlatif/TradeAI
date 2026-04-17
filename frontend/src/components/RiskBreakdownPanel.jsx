@@ -29,32 +29,32 @@ const API_BASE = "http://localhost:5000/api/analytics";
 
 const RISK_COLORS = {
   LOW: {
-    bg: "bg-emerald-900/30",
-    border: "border-emerald-500",
-    text: "text-emerald-400",
-    hex: "#34D399",
-    badge: "bg-emerald-500/20 text-emerald-300",
+    bg: "bg-[#141b27]",
+    border: "border-[#8ab4ff]",
+    text: "text-[#8ab4ff]",
+    hex: "#8ab4ff",
+    badge: "bg-[#8ab4ff]/20 text-[#c9dcff]",
   },
   MODERATE: {
-    bg: "bg-yellow-900/30",
-    border: "border-yellow-500",
-    text: "text-yellow-400",
-    hex: "#FBBF24",
-    badge: "bg-yellow-500/20 text-yellow-300",
+    bg: "bg-[#161616]",
+    border: "border-[#3a3a3a]",
+    text: "text-neutral-300",
+    hex: "#d4d4d4",
+    badge: "bg-[#2a2a2a] text-neutral-300",
   },
   HIGH: {
-    bg: "bg-orange-900/30",
-    border: "border-orange-500",
-    text: "text-orange-400",
-    hex: "#FB923C",
-    badge: "bg-orange-500/20 text-orange-300",
+    bg: "bg-[#1a1a1a]",
+    border: "border-[#4a4a4a]",
+    text: "text-neutral-200",
+    hex: "#a3a3a3",
+    badge: "bg-[#323232] text-neutral-200",
   },
   CRITICAL: {
-    bg: "bg-red-900/30",
-    border: "border-red-500",
-    text: "text-red-400",
-    hex: "#F87171",
-    badge: "bg-red-500/20 text-red-300",
+    bg: "bg-[#1d1d1d]",
+    border: "border-[#5a5a5a]",
+    text: "text-neutral-100",
+    hex: "#737373",
+    badge: "bg-[#3c3c3c] text-neutral-100",
   },
 };
 
@@ -79,8 +79,8 @@ function generateWhyLabel(indicator, rawValue, normalizedScore, riskLevel) {
   const direction = riskLevel === "LOW" || riskLevel === "MODERATE" ? "▼" : "▲";
   const color =
     riskLevel === "LOW" || riskLevel === "MODERATE"
-      ? "text-emerald-400"
-      : "text-red-400";
+      ? "text-[#8ab4ff]"
+      : "text-neutral-300";
 
   const shortNames = {
     "GDP Growth Rate (%)": "Low GDP Growth",
@@ -113,7 +113,7 @@ function RiskBadge({ level }) {
 function ScoreBar({ score, level }) {
   const c = RISK_COLORS[level] || RISK_COLORS.MODERATE;
   return (
-    <div className="w-full bg-gray-800 rounded-full h-2 mt-1">
+    <div className="w-full bg-[#2a2a2a] rounded-full h-2 mt-1">
       <div
         className="h-2 rounded-full transition-all duration-500"
         style={{ width: `${score}%`, background: c.hex }}
@@ -127,8 +127,8 @@ function DimensionCard({ label, score, weight, level }) {
   return (
     <div className={`rounded-xl border p-4 ${c.bg} ${c.border}`}>
       <div className="flex justify-between items-center mb-1">
-        <span className="text-xs text-gray-400 font-medium">{label}</span>
-        <span className="text-xs text-gray-500">{weight}% weight</span>
+        <span className="text-xs text-neutral-400 font-medium">{label}</span>
+        <span className="text-xs text-neutral-500">{weight}% weight</span>
       </div>
       <div className="flex items-center justify-between">
         <span className={`text-2xl font-bold ${c.text}`}>
@@ -158,14 +158,14 @@ function IndicatorRow({ item, index }) {
     >
       <div className="flex items-center gap-3 p-3">
         {/* Rank */}
-        <span className="text-xs text-gray-600 w-5 text-center font-mono">
+        <span className="text-xs text-neutral-600 w-5 text-center font-mono">
           {index + 1}
         </span>
 
         {/* Indicator name */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-medium text-white truncate">
+            <span className="text-sm font-medium text-neutral-100 truncate">
               {item.indicator}
             </span>
             <RiskBadge level={item.risk_level} />
@@ -179,11 +179,11 @@ function IndicatorRow({ item, index }) {
           <div className={`text-lg font-bold ${c.text}`}>
             {item.normalized_score.toFixed(1)}
           </div>
-          <div className="text-xs text-gray-600">/100</div>
+          <div className="text-xs text-neutral-600">/100</div>
         </div>
 
         {/* Expand arrow */}
-        <span className="text-gray-600 text-xs ml-1">
+        <span className="text-neutral-600 text-xs ml-1">
           {expanded ? "▲" : "▼"}
         </span>
       </div>
@@ -195,33 +195,33 @@ function IndicatorRow({ item, index }) {
 
       {/* Expanded detail */}
       {expanded && (
-        <div className="px-3 pb-3 pt-1 border-t border-gray-700/50 space-y-2">
-          <p className="text-xs text-gray-300 leading-relaxed">
+        <div className="px-3 pb-3 pt-1 border-t border-[#2a2a2a] space-y-2">
+          <p className="text-xs text-neutral-300 leading-relaxed">
             {item.interpretation}
           </p>
           <div className="grid grid-cols-3 gap-2 text-xs">
-            <div className="bg-black/20 rounded p-2">
-              <div className="text-gray-500">Raw Value</div>
-              <div className="text-white font-semibold">
+            <div className="bg-[#171717] rounded p-2 border border-[#2a2a2a]">
+              <div className="text-neutral-500">Raw Value</div>
+              <div className="text-neutral-100 font-semibold">
                 {item.raw_value !== null ? item.raw_value : "N/A"}
               </div>
             </div>
-            <div className="bg-black/20 rounded p-2">
-              <div className="text-gray-500">Weight</div>
-              <div className="text-white font-semibold">
+            <div className="bg-[#171717] rounded p-2 border border-[#2a2a2a]">
+              <div className="text-neutral-500">Weight</div>
+              <div className="text-neutral-100 font-semibold">
                 {(item.weight * 100).toFixed(0)}%
               </div>
             </div>
-            <div className="bg-black/20 rounded p-2">
-              <div className="text-gray-500">Contribution</div>
+            <div className="bg-[#171717] rounded p-2 border border-[#2a2a2a]">
+              <div className="text-neutral-500">Contribution</div>
               <div className={`font-semibold ${c.text}`}>
                 +{item.weighted_contribution.toFixed(2)}
               </div>
             </div>
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-neutral-500">
             Dimension:{" "}
-            <span className="text-gray-400">
+            <span className="text-neutral-400">
               {DIMENSION_LABELS[item.dimension] || item.dimension}
             </span>
           </div>
@@ -363,30 +363,30 @@ export default function RiskBreakdownPanel() {
     : "MODERATE";
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6 font-sans">
+    <div className="min-h-screen bg-[#0a0a0a] text-neutral-100 p-6 font-sans">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">
+          <div className="text-xs text-neutral-500 uppercase tracking-widest mb-1">
             Indicator breakdown
           </div>
-          <h1 className="text-3xl font-bold">
-            Risk <span className="text-violet-400">Interpretability</span> Panel
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Risk <span className="text-[#8ab4ff]">Interpretability</span> Panel
           </h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <p className="text-neutral-400 text-sm mt-1">
             Transparent breakdown of why a country received its risk score — per
             indicator, per dimension.
           </p>
         </div>
 
         {/* Input Form */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
-          <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">
+        <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 mb-6">
+          <h2 className="text-sm font-semibold text-neutral-300 mb-4 uppercase tracking-wider">
             Country Inputs
           </h2>
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-neutral-500 mb-1 block">
                 Country Code (ISO-3)
               </label>
               <input
@@ -394,30 +394,30 @@ export default function RiskBreakdownPanel() {
                 onChange={(e) => setCountryCode(e.target.value)}
                 placeholder="e.g. BGD"
                 maxLength={3}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-neutral-500 mb-1 block">
                 Country Name
               </label>
               <input
                 value={countryName}
                 onChange={(e) => setCountryName(e.target.value)}
                 placeholder="e.g. Bangladesh"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
               />
             </div>
           </div>
 
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-neutral-500 mb-3">
             Enter indicators manually or leave blank to auto-fetch from
             WorldBank API.
           </p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {Object.entries(INDICATOR_LABELS).map(([field, label]) => (
               <div key={field}>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-neutral-500 mb-1 block">
                   {label}
                 </label>
                 <input
@@ -425,14 +425,14 @@ export default function RiskBreakdownPanel() {
                   value={indicators[field]}
                   onChange={(e) => handleChange(field, e.target.value)}
                   placeholder="auto"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                  className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
                 />
               </div>
             ))}
           </div>
 
           {error && (
-            <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg px-4 py-2 text-red-400 text-sm">
+            <div className="mt-4 bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-2 text-red-300 text-sm">
               {error}
             </div>
           )}
@@ -440,7 +440,7 @@ export default function RiskBreakdownPanel() {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="mt-5 w-full bg-violet-600 hover:bg-violet-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+            className="btn-ui btn-primary mt-5 w-full py-3 font-semibold"
           >
             {loading ? "Analyzing Risk Factors…" : "Generate Breakdown"}
           </button>
@@ -455,9 +455,9 @@ export default function RiskBreakdownPanel() {
             >
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                  <div className="text-xl font-bold text-white">
+                  <div className="text-xl font-semibold text-neutral-100">
                     {result.country_name}
-                    <span className="text-gray-500 text-sm ml-2">
+                    <span className="text-neutral-500 text-sm ml-2">
                       ({result.country_code})
                     </span>
                   </div>
@@ -468,27 +468,27 @@ export default function RiskBreakdownPanel() {
                       {result.aggregate_risk_score.toFixed(1)}
                     </span>
                     <div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-neutral-500">
                         Aggregate Risk Score
                       </div>
                       <RiskBadge level={aggregateLevel} />
                     </div>
                   </div>
                 </div>
-                <div className="text-right text-xs text-gray-500 space-y-1">
+                <div className="text-right text-xs text-neutral-500 space-y-1">
                   <div>
                     Confidence:{" "}
-                    <span className="text-gray-300 font-semibold">
+                    <span className="text-neutral-300 font-semibold">
                       {result.confidence}
                     </span>
                   </div>
                   <div>
                     Computed:{" "}
-                    <span className="text-gray-300">
+                    <span className="text-neutral-300">
                       {new Date(result.computed_at).toLocaleTimeString()}
                     </span>
                   </div>
-                  <div className="text-gray-600 italic text-xs">
+                  <div className="text-neutral-600 italic text-xs">
                     Score explained below ↓
                   </div>
                 </div>
@@ -496,7 +496,7 @@ export default function RiskBreakdownPanel() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b border-gray-800 pb-2">
+            <div className="flex gap-2 border-b border-[#2a2a2a] pb-2">
               {[
                 { key: "indicators", label: "📋 Indicator Breakdown" },
                 { key: "dimensions", label: "🧩 Dimensions" },
@@ -505,10 +505,10 @@ export default function RiskBreakdownPanel() {
                 <button
                   key={key}
                   onClick={() => setActiveTab(key)}
-                  className={`text-sm px-4 py-1.5 rounded-lg transition-colors ${
+                  className={`btn-ui transition-colors ${
                     activeTab === key
-                      ? "bg-violet-600 text-white"
-                      : "text-gray-400 hover:text-white"
+                      ? "bg-[#8ab4ff] text-black"
+                      : "text-neutral-400 hover:text-neutral-100"
                   }`}
                 >
                   {label}
@@ -521,15 +521,15 @@ export default function RiskBreakdownPanel() {
               <div>
                 {/* Sort control */}
                 <div className="flex items-center gap-3 mb-3">
-                  <span className="text-xs text-gray-500">Sort by:</span>
+                  <span className="text-xs text-neutral-500">Sort by:</span>
                   {["score", "dimension"].map((s) => (
                     <button
                       key={s}
                       onClick={() => setSortBy(s)}
-                      className={`text-xs px-3 py-1 rounded-lg capitalize transition-colors ${
+                      className={`btn-ui text-xs px-3 py-1 capitalize transition-colors ${
                         sortBy === s
-                          ? "bg-gray-700 text-white"
-                          : "text-gray-500 hover:text-gray-300"
+                          ? "bg-[#8ab4ff] text-black"
+                          : "text-neutral-500 hover:text-neutral-300"
                       }`}
                     >
                       {s === "score" ? "Risk Score ↓" : "Dimension"}
@@ -545,10 +545,10 @@ export default function RiskBreakdownPanel() {
                         className="w-2 h-2 rounded-full"
                         style={{ background: RISK_COLORS[l].hex }}
                       />
-                      <span className="text-xs text-gray-500">{l}</span>
+                      <span className="text-xs text-neutral-500">{l}</span>
                     </div>
                   ))}
-                  <span className="text-xs text-gray-600 ml-auto">
+                  <span className="text-xs text-neutral-600 ml-auto">
                     Click any row to expand
                   </span>
                 </div>
@@ -564,7 +564,7 @@ export default function RiskBreakdownPanel() {
             {/* Tab: Dimensions */}
             {activeTab === "dimensions" && (
               <div>
-                <p className="text-xs text-gray-500 mb-4">
+                <p className="text-xs text-neutral-500 mb-4">
                   The aggregate score is a weighted combination of 4 risk
                   dimensions.
                 </p>
@@ -581,17 +581,17 @@ export default function RiskBreakdownPanel() {
                 </div>
 
                 {/* Weight breakdown */}
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-5">
-                  <h3 className="text-xs text-gray-500 uppercase tracking-wider mb-3">
+                <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
+                  <h3 className="text-xs text-neutral-500 uppercase tracking-wider mb-3">
                     Dimension Weight Distribution
                   </h3>
                   <div className="space-y-2">
                     {dimensionData.map((d) => (
                       <div key={d.key} className="flex items-center gap-3">
-                        <span className="text-xs text-gray-400 w-36">
+                        <span className="text-xs text-neutral-400 w-36">
                           {d.label}
                         </span>
-                        <div className="flex-1 bg-gray-800 rounded-full h-2">
+                        <div className="flex-1 bg-[#2a2a2a] rounded-full h-2">
                           <div
                             className="h-2 rounded-full"
                             style={{
@@ -600,13 +600,13 @@ export default function RiskBreakdownPanel() {
                             }}
                           />
                         </div>
-                        <span className="text-xs text-gray-400 w-8 text-right">
+                        <span className="text-xs text-neutral-400 w-8 text-right">
                           {d.weight}%
                         </span>
                       </div>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-600 mt-3">
+                  <p className="text-xs text-neutral-600 mt-3">
                     Formula: Score = (Economic × 35%) + (Trade × 30%) + (Fiscal
                     × 20%) + (Market × 15%)
                   </p>
@@ -616,11 +616,11 @@ export default function RiskBreakdownPanel() {
 
             {/* Tab: Contribution Chart */}
             {activeTab === "chart" && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-                <h3 className="text-sm text-gray-400 mb-1 uppercase tracking-wider">
+              <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6">
+                <h3 className="text-sm text-neutral-400 mb-1 uppercase tracking-wider">
                   Top Risk Contributors
                 </h3>
-                <p className="text-xs text-gray-600 mb-4">
+                <p className="text-xs text-neutral-600 mb-4">
                   Weighted contribution of each indicator to the final score.
                 </p>
                 <ResponsiveContainer width="100%" height={320}>
@@ -631,28 +631,28 @@ export default function RiskBreakdownPanel() {
                   >
                     <XAxis
                       type="number"
-                      tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                      tick={{ fill: "#a3a3a3", fontSize: 11 }}
                     />
                     <YAxis
                       type="category"
                       dataKey="name"
                       width={110}
-                      tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                      tick={{ fill: "#a3a3a3", fontSize: 11 }}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "#111827",
-                        border: "1px solid #374151",
+                        background: "#111111",
+                        border: "1px solid #2a2a2a",
                         borderRadius: 8,
                       }}
-                      labelStyle={{ color: "#F9FAFB" }}
+                      labelStyle={{ color: "#f5f5f5" }}
                       formatter={(val) => [`${val} pts`, "Contribution"]}
                     />
                     <Bar dataKey="contribution" radius={[0, 6, 6, 0]}>
                       <LabelList
                         dataKey="contribution"
                         position="right"
-                        style={{ fill: "#9CA3AF", fontSize: 11 }}
+                        style={{ fill: "#a3a3a3", fontSize: 11 }}
                       />
                       {chartData.map((entry, index) => {
                         const c =

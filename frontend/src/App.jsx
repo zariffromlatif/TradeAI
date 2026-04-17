@@ -18,9 +18,9 @@ import Advisory from "./pages/Advisory";
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-gray-950 text-white">
+      <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
         <Navbar />
-        <main className="p-6">
+        <main className="mx-auto w-full max-w-[1400px] px-6 py-6">
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" />} />
             <Route path="/dashboard" element={<Dashboard />} />

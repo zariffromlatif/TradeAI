@@ -5,9 +5,9 @@ import { Lightbulb, Loader2 } from "lucide-react";
 const API = "http://localhost:5000/api";
 
 const severityStyles = {
-  high: "border-red-500/50 bg-red-500/10 text-red-200",
-  medium: "border-amber-500/50 bg-amber-500/10 text-amber-100",
-  low: "border-gray-600 bg-gray-800/50 text-gray-300",
+  high: "border-[#8ab4ff]/50 bg-[#8ab4ff]/10 text-[#d7e5ff]",
+  medium: "border-[#3a3a3a] bg-[#171717] text-neutral-200",
+  low: "border-[#2a2a2a] bg-[#151515] text-neutral-300",
 };
 
 function Advisory() {
@@ -59,40 +59,40 @@ function Advisory() {
   };
 
   if (loadingLists) {
-    return <p className="text-gray-400">Loading…</p>;
+    return <p className="text-neutral-400">Loading…</p>;
   }
 
   return (
     <div className="max-w-3xl mx-auto space-y-8">
       <div className="flex items-center gap-3">
-        <Lightbulb className="text-amber-400" size={28} />
+        <Lightbulb className="text-[#8ab4ff]" size={28} />
         <div>
-          <h1 className="text-2xl font-bold text-white">Advisory</h1>
-          <p className="text-gray-400 text-sm">
+          <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Advisory</h1>
+          <p className="text-neutral-400 text-sm">
             Rule-based suggestions from ML risk score, macro fields, and optional
-            commodity <code className="text-emerald-400">priceHistory</code>{" "}
+            commodity <code className="text-[#8ab4ff]">priceHistory</code>{" "}
             volatility. Not professional advice.
           </p>
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
 
       <form
         onSubmit={runAdvisory}
-        className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-4"
+        className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-4"
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-400">Country</span>
+            <span className="text-neutral-400">Country</span>
             <select
               value={countryCode}
               onChange={(e) => setCountryCode(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+              className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
               required
             >
               {countries.map((c) => (
@@ -103,11 +103,11 @@ function Advisory() {
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-gray-400">Commodity (optional)</span>
+            <span className="text-neutral-400">Commodity (optional)</span>
             <select
               value={commodity}
               onChange={(e) => setCommodity(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white"
+              className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
             >
               <option value="">None — country + risk only</option>
               {commodities.map((c) => (
@@ -121,7 +121,7 @@ function Advisory() {
         <button
           type="submit"
           disabled={submitting}
-          className="inline-flex items-center gap-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-medium px-6 py-2 rounded-lg"
+          className="btn-ui btn-primary inline-flex items-center gap-2"
         >
           {submitting && <Loader2 className="animate-spin" size={18} />}
           {submitting ? "Analyzing…" : "Get recommendations"}
@@ -130,28 +130,28 @@ function Advisory() {
 
       {result && (
         <div className="space-y-6">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 text-sm">
-            <h2 className="text-white font-semibold mb-3">Signals used</h2>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-gray-400">
+          <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5 text-sm">
+            <h2 className="text-neutral-100 font-semibold mb-3">Signals used</h2>
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-neutral-400">
               <dt>Risk score</dt>
-              <dd className="text-white text-right">
+              <dd className="text-neutral-100 text-right">
                 {result.signals.riskScore ?? "—"}{" "}
                 {result.signals.riskLabel && (
-                  <span className="text-gray-500">
+                  <span className="text-neutral-500">
                     ({result.signals.riskLabel})
                   </span>
                 )}
               </dd>
               <dt>Inflation %</dt>
-              <dd className="text-right text-white">
+              <dd className="text-right text-neutral-100">
                 {result.signals.inflation ?? "—"}
               </dd>
               <dt>Trade balance (USD B)</dt>
-              <dd className="text-right text-white">
+              <dd className="text-right text-neutral-100">
                 {result.signals.tradeBalanceUsd ?? "—"}
               </dd>
               <dt>Price vol. (log σ)</dt>
-              <dd className="text-right text-white">
+              <dd className="text-right text-neutral-100">
                 {result.signals.priceVolatilityStd != null
                   ? result.signals.priceVolatilityStd.toFixed(4)
                   : "—"}
@@ -160,7 +160,7 @@ function Advisory() {
           </div>
 
           <div>
-            <h2 className="text-lg font-semibold text-white mb-3">
+            <h2 className="text-lg font-semibold text-neutral-100 mb-3">
               Recommendations
             </h2>
             <ul className="space-y-3">
@@ -169,7 +169,7 @@ function Advisory() {
                   key={r.id}
                   className={`rounded-xl border px-4 py-3 ${severityStyles[r.severity] || severityStyles.low}`}
                 >
-                  <div className="font-medium text-white">{r.title}</div>
+                  <div className="font-medium text-neutral-100">{r.title}</div>
                   <p className="text-sm mt-1 opacity-90">{r.detail}</p>
                   <span className="text-xs uppercase tracking-wide opacity-60 mt-2 inline-block">
                     {r.severity}
@@ -179,7 +179,7 @@ function Advisory() {
             </ul>
           </div>
 
-          <p className="text-gray-600 text-xs">{result.disclaimer}</p>
+          <p className="text-neutral-600 text-xs">{result.disclaimer}</p>
         </div>
       )}
     </div>

@@ -30,28 +30,28 @@ const API_BASE = "http://localhost:5000/api/analytics";
 
 const RISK_COLORS = {
   LOW: {
-    bg: "bg-emerald-900/40",
-    border: "border-emerald-500",
-    text: "text-emerald-400",
-    bar: "#34D399",
+    bg: "bg-[#141b27]",
+    border: "border-[#8ab4ff]",
+    text: "text-[#8ab4ff]",
+    bar: "#8ab4ff",
   },
   MODERATE: {
-    bg: "bg-yellow-900/40",
-    border: "border-yellow-500",
-    text: "text-yellow-400",
-    bar: "#FBBF24",
+    bg: "bg-[#161616]",
+    border: "border-[#3a3a3a]",
+    text: "text-neutral-300",
+    bar: "#c7c7c7",
   },
   HIGH: {
-    bg: "bg-orange-900/40",
-    border: "border-orange-500",
-    text: "text-orange-400",
-    bar: "#FB923C",
+    bg: "bg-[#1a1a1a]",
+    border: "border-[#4a4a4a]",
+    text: "text-neutral-200",
+    bar: "#9fa6b2",
   },
   CRITICAL: {
-    bg: "bg-red-900/40",
-    border: "border-red-500",
-    text: "text-red-400",
-    bar: "#F87171",
+    bg: "bg-[#1d1d1d]",
+    border: "border-[#5a5a5a]",
+    text: "text-neutral-100",
+    bar: "#7a7a7a",
   },
 };
 
@@ -216,31 +216,31 @@ export default function RiskScorePanel() {
     : [];
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-6 font-sans">
+    <div className="min-h-screen bg-[#0a0a0a] text-neutral-100 p-6 font-sans">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">
+          <div className="text-xs text-neutral-500 uppercase tracking-widest mb-1">
             Automated risk analysis
           </div>
-          <h1 className="text-3xl font-bold text-white">
-            Country Risk <span className="text-violet-400">Scoring</span>
+          <h1 className="text-3xl font-semibold tracking-tight text-neutral-100">
+            Country Risk <span className="text-[#8ab4ff]">Scoring</span>
           </h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <p className="text-neutral-400 text-sm mt-1">
             Automated aggregate risk score using macroeconomic indicators via
             WorldBank + ExchangeRate APIs.
           </p>
         </div>
 
         {/* Input Form */}
-        <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 mb-6">
-          <h2 className="text-sm font-semibold text-gray-300 mb-4 uppercase tracking-wider">
+        <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 mb-6">
+          <h2 className="text-sm font-semibold text-neutral-300 mb-4 uppercase tracking-wider">
             Country Inputs
           </h2>
 
           <div className="grid grid-cols-2 gap-4 mb-5">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-neutral-500 mb-1 block">
                 Country Code (ISO-3)
               </label>
               <input
@@ -248,23 +248,23 @@ export default function RiskScorePanel() {
                 onChange={(e) => setCountryCode(e.target.value)}
                 placeholder="e.g. BGD"
                 maxLength={3}
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
               />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">
+              <label className="text-xs text-neutral-500 mb-1 block">
                 Country Name
               </label>
               <input
                 value={countryName}
                 onChange={(e) => setCountryName(e.target.value)}
                 placeholder="e.g. Bangladesh"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
               />
             </div>
           </div>
 
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="text-xs text-neutral-500 mb-3">
             Macroeconomic indicators — leave blank to auto-fetch from WorldBank
             API.
           </p>
@@ -272,7 +272,7 @@ export default function RiskScorePanel() {
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {Object.entries(INDICATOR_LABELS).map(([field, label]) => (
               <div key={field}>
-                <label className="text-xs text-gray-500 mb-1 block">
+                <label className="text-xs text-neutral-500 mb-1 block">
                   {label}
                 </label>
                 <input
@@ -280,14 +280,14 @@ export default function RiskScorePanel() {
                   value={indicators[field]}
                   onChange={(e) => handleIndicatorChange(field, e.target.value)}
                   placeholder="auto"
-                  className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500"
+                  className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
                 />
               </div>
             ))}
           </div>
 
           {error && (
-            <div className="mt-4 bg-red-900/30 border border-red-700 rounded-lg px-4 py-2 text-red-400 text-sm">
+            <div className="mt-4 bg-red-500/10 border border-red-500/40 rounded-xl px-4 py-2 text-red-300 text-sm">
               {error}
             </div>
           )}
@@ -295,7 +295,7 @@ export default function RiskScorePanel() {
           <button
             onClick={handleSubmit}
             disabled={loading}
-            className="mt-5 w-full bg-violet-600 hover:bg-violet-500 disabled:bg-gray-700 disabled:text-gray-500 text-white font-semibold py-3 rounded-xl transition-colors text-sm"
+            className="btn-ui btn-primary mt-5 w-full py-3 font-semibold"
           >
             {loading ? "Computing Risk Score…" : "Compute Risk Score"}
           </button>
@@ -314,9 +314,9 @@ export default function RiskScorePanel() {
                   category={result.risk_category}
                 />
                 <div className="flex-1">
-                  <div className="text-2xl font-bold text-white mb-1">
+                  <div className="text-2xl font-semibold text-neutral-100 mb-1">
                     {result.country_name}
-                    <span className="text-gray-500 text-sm ml-2">
+                    <span className="text-neutral-500 text-sm ml-2">
                       ({result.country_code})
                     </span>
                   </div>
@@ -346,25 +346,25 @@ export default function RiskScorePanel() {
                     ].map(({ label, val }) => (
                       <div
                         key={label}
-                        className="bg-black/20 rounded-lg px-3 py-2"
+                        className="bg-[#171717] rounded-xl px-3 py-2 border border-[#2a2a2a]"
                       >
-                        <div className="text-gray-400 text-xs">{label}</div>
-                        <div className="text-white font-semibold">
+                        <div className="text-neutral-400 text-xs">{label}</div>
+                        <div className="text-neutral-100 font-semibold">
                           {val.toFixed(1)}
                         </div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-3 text-xs text-gray-500">
+                  <div className="mt-3 text-xs text-neutral-500">
                     Confidence:{" "}
-                    <span className="text-gray-300">{result.confidence}</span> ·
+                    <span className="text-neutral-300">{result.confidence}</span> ·
                     Indicators Used:{" "}
-                    <span className="text-gray-300">
+                    <span className="text-neutral-300">
                       {result.indicators_used}/
                       {result.indicators_used + result.indicators_missing}
                     </span>{" "}
                     · Model:{" "}
-                    <span className="text-gray-300">
+                    <span className="text-neutral-300">
                       {result.model_version}
                     </span>
                   </div>
@@ -373,15 +373,15 @@ export default function RiskScorePanel() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 border-b border-gray-800 pb-2">
+            <div className="flex gap-2 border-b border-[#2a2a2a] pb-2">
               {["overview", "breakdown", "radar"].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`text-sm px-4 py-1.5 rounded-lg capitalize transition-colors ${
+                  className={`btn-ui capitalize ${
                     activeTab === tab
-                      ? "bg-violet-600 text-white"
-                      : "text-gray-400 hover:text-white"
+                      ? "bg-[#8ab4ff] text-black"
+                      : "text-neutral-400 hover:text-neutral-100"
                   }`}
                 >
                   {tab === "overview"
@@ -395,27 +395,27 @@ export default function RiskScorePanel() {
 
             {/* Tab: Dimension Radar */}
             {activeTab === "radar" && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-                <h3 className="text-sm text-gray-400 mb-4 uppercase tracking-wider">
+              <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6">
+                <h3 className="text-sm text-neutral-400 mb-4 uppercase tracking-wider">
                   Risk Dimension Radar
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
                   <RadarChart data={radarData}>
-                    <PolarGrid stroke="#374151" />
+                    <PolarGrid stroke="#2a2a2a" />
                     <PolarAngleAxis
                       dataKey="dim"
-                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                      tick={{ fill: "#a3a3a3", fontSize: 12 }}
                     />
                     <PolarRadiusAxis
                       angle={30}
                       domain={[0, 100]}
-                      tick={{ fill: "#6B7280", fontSize: 10 }}
+                      tick={{ fill: "#737373", fontSize: 10 }}
                     />
                     <Radar
                       name="Risk"
                       dataKey="score"
-                      stroke="#A78BFA"
-                      fill="#A78BFA"
+                      stroke="#8ab4ff"
+                      fill="#8ab4ff"
                       fillOpacity={0.3}
                     />
                   </RadarChart>
@@ -425,8 +425,8 @@ export default function RiskScorePanel() {
 
             {/* Tab: Dimension Overview bars */}
             {activeTab === "overview" && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-                <h3 className="text-sm text-gray-400 mb-4 uppercase tracking-wider">
+              <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6">
+                <h3 className="text-sm text-neutral-400 mb-4 uppercase tracking-wider">
                   Dimension Risk Scores
                 </h3>
                 <ResponsiveContainer width="100%" height={220}>
@@ -434,33 +434,33 @@ export default function RiskScorePanel() {
                     <XAxis
                       type="number"
                       domain={[0, 100]}
-                      tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                      tick={{ fill: "#a3a3a3", fontSize: 11 }}
                     />
                     <YAxis
                       type="category"
                       dataKey="dim"
                       width={120}
-                      tick={{ fill: "#9CA3AF", fontSize: 12 }}
+                      tick={{ fill: "#a3a3a3", fontSize: 12 }}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "#111827",
-                        border: "1px solid #374151",
+                        background: "#111111",
+                        border: "1px solid #2a2a2a",
                         borderRadius: 8,
                       }}
-                      labelStyle={{ color: "#F9FAFB" }}
+                      labelStyle={{ color: "#f5f5f5" }}
                     />
                     <Bar dataKey="score" radius={[0, 6, 6, 0]}>
                       {radarData.map((entry, index) => {
                         const score = entry.score;
                         const color =
                           score < 25
-                            ? "#34D399"
+                            ? "#8ab4ff"
                             : score < 50
-                              ? "#FBBF24"
+                              ? "#d4d4d4"
                               : score < 75
-                                ? "#FB923C"
-                                : "#F87171";
+                                ? "#a3a3a3"
+                                : "#737373";
                         return <Cell key={index} fill={color} />;
                       })}
                     </Bar>
@@ -470,11 +470,11 @@ export default function RiskScorePanel() {
             )}
 
             {activeTab === "breakdown" && (
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
-                <h3 className="text-sm text-gray-400 mb-1 uppercase tracking-wider">
+              <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6">
+                <h3 className="text-sm text-neutral-400 mb-1 uppercase tracking-wider">
                   Risk Interpretability Panel
                 </h3>
-                <p className="text-xs text-gray-600 mb-4">
+                <p className="text-xs text-neutral-600 mb-4">
                   Per-indicator breakdown with scoring rationale.
                 </p>
                 <div className="space-y-3">
@@ -486,20 +486,20 @@ export default function RiskScorePanel() {
                         className={`rounded-lg border p-4 ${c.bg} ${c.border}`}
                       >
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium text-white">
+                          <span className="text-sm font-medium text-neutral-100">
                             {b.indicator}
                           </span>
                           <div className="flex items-center gap-2">
                             <span className={`text-xs font-semibold ${c.text}`}>
                               {b.risk_level}
                             </span>
-                            <span className="text-sm font-bold text-white">
+                            <span className="text-sm font-bold text-neutral-100">
                               {b.normalized_score.toFixed(1)}
                             </span>
                           </div>
                         </div>
                         {/* Score bar */}
-                        <div className="h-1.5 bg-gray-700 rounded-full mb-2">
+                        <div className="h-1.5 bg-[#2a2a2a] rounded-full mb-2">
                           <div
                             className="h-1.5 rounded-full transition-all"
                             style={{
@@ -508,10 +508,10 @@ export default function RiskScorePanel() {
                             }}
                           />
                         </div>
-                        <p className="text-xs text-gray-400">
+                        <p className="text-xs text-neutral-400">
                           {b.interpretation}
                         </p>
-                        <div className="mt-1 text-xs text-gray-600">
+                        <div className="mt-1 text-xs text-neutral-600">
                           Raw: {b.raw_value !== null ? b.raw_value : "N/A"} ·
                           Weight: {(b.weight * 100).toFixed(0)}% · Contribution:{" "}
                           {b.weighted_contribution.toFixed(2)}
