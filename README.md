@@ -60,7 +60,7 @@ A **checklist table** for all **16** spec items (Modules 1–4), with **Met / Pa
 
 ## Forecasts (Feature 7)
 
-- **Dual factor:** (1) **Trade volume** — monthly totals from `TradeRecord.volume` (optional filters: commodity, country, import/export), forecast via lag-1 linear regression in the ML service (naive fallback if the series is short). (2) **Volatility proxy** — log-return volatility from **`Commodity.priceHistory`** (not FX; documented as a market-uncertainty proxy).
+- **Dual factor:** (1) **Trade volume** — monthly totals from `TradeRecord.volume` (optional filters: commodity, country, import/export), forecast via lag-1 linear regression in the ML service (naive fallback if the series is short). (2) **FX volatility** — log-return volatility from real historical exchange-rate series stored in `FxRate.history`.
 - **Express:** `POST /api/analytics/forecast/volume` (body: `commodity`, optional `country`, `type`, `horizon`) and `POST /api/analytics/forecast/price-volatility` (body: `commodity`). Both **proxy to the ML service** on port **8000** — the ML layer must be running or these return errors.
 - **ML:** `POST /api/forecast/trade-volume`, `POST /api/forecast/price-volatility` in `ml-service/main.py`.
 - **UI:** `frontend/src/pages/Forecasts.jsx`, route **`/forecasts`**.
@@ -240,7 +240,8 @@ Open **3 terminals simultaneously**:
 | GET | `/api/analytics/compare` | Dual-country time series (query: countryA, countryB, type, commodity) |
 | POST | `/api/analytics/risk-score/batch` | Batch risk scores (proxy to ML) |
 | POST | `/api/analytics/forecast/volume` | F7 trade-volume forecast (`commodity`, optional `country`, `type`, `horizon`) — **requires ML** |
-| POST | `/api/analytics/forecast/price-volatility` | F7 log-return volatility from `priceHistory` (proxy, not FX) — **requires ML** |
+| POST | `/api/analytics/forecast/price-volatility` | F7 log-return volatility from real FX history (`fxPair`) — **requires ML** |
+| GET | `/api/analytics/fx/pairs` | List available synced FX pairs for F7 |
 | GET | `/api/orders` | All orders |
 | GET | `/api/orders/anomalies` | Orders flagged by anomaly logic |
 | GET/POST/PUT/DELETE | `/api/orders`, `/api/orders/:id` | Order management |

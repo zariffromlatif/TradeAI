@@ -27,7 +27,7 @@ _Last reviewed with the codebase (Express, React, ML service, Mongo)._
 
 | # | Requirement (summary) | Status | Notes / where to look |
 |---|-------------------------|--------|------------------------|
-| **7** | Dual-factor predictive engine (trade volume + **FX** volatility) | **Partial** | **Volume:** `POST /api/analytics/forecast/volume` + ML `POST /api/forecast/trade-volume`, UI `/forecasts`. **Volatility:** **commodity `priceHistory` log-return proxy**, not real FX time series — document as intentional proxy unless FX data is added. |
+| **7** | Dual-factor predictive engine (trade volume + **FX** volatility) | **Met** | **Volume:** `POST /api/analytics/forecast/volume` + ML `POST /api/forecast/trade-volume`, UI `/forecasts`. **Volatility:** real FX log-return volatility from synced `FxRate.history` via `POST /api/analytics/forecast/price-volatility` (`fxPair`). |
 | **8** | Automated country risk scoring | **Partial** | ML + Express bridge; indicators fed from DB are **limited** (e.g. inflation, trade balance, placeholder GDP) vs “full macro + trade stability + real-time market.” |
 | **9** | Risk interpretability panel | **Met** | `RiskScorePanel.jsx`, `RiskBreakdownPanel.jsx`, `POST /api/analytics/risk/:country/breakdown` → ML |
 
@@ -71,28 +71,25 @@ Ordered by **impact vs effort** for aligning with the written spec.
 1. **FR3 — Trade balance UI**  
    - Add a page (or dashboard section) that calls `GET /api/analytics/trade-balance` with **region** (and/or country) and renders a **time-series chart**.
 
-2. **FR7 — FX volatility (optional upgrade)**  
-   - Either: ingest **real FX** series + volatility endpoint, **or** keep proxy and label README/spec as “price-risk proxy for F7 second factor.”
-
-3. **FR11 — FX in profitability**  
+2. **FR11 — FX in profitability**  
    - Add optional **fxRate** (or separate local/USD legs) to `POST /api/sim/profitability` and UI so margins reflect FX movement, not only USD inputs.
 
-4. **FR10 — Order delete in UI**  
+3. **FR10 — Order delete in UI**  
    - Wire `DELETE /api/orders/:id` with confirm dialog on `Orders.jsx`.
 
-5. **FR15 — Richer PDF**  
+4. **FR15 — Richer PDF**  
    - Append sections: **one risk summary** (country + score) and/or **one forecast snapshot**; optional query params for country/commodity.
 
-6. **FR16 — Broader alerts (optional)**  
+5. **FR16 — Broader alerts (optional)**  
    - Extend bell logic: e.g. poll risk score vs threshold, or surface **high** `priceVolatility` from F7 — or document that **v1 = order anomalies only**.
 
-7. **FR4 — Compare “pricing”**  
+6. **FR4 — Compare “pricing”**  
    - If required literally: add commodity **price** series overlay or second chart from `priceHistory` alongside trade values.
 
-8. **FR5 — Receipts**  
+7. **FR5 — Receipts**  
    - Minimal: email receipt via Stripe settings; or store `session.id` / PDF on success page — only if rubric demands it.
 
-9. **FR8 — Richer risk inputs**  
+8. **FR8 — Richer risk inputs**  
    - Expand country payload to ML with more indicators from DB or external stubs — polish, not blocking for demo.
 
 ---

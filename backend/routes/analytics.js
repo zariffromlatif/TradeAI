@@ -6,6 +6,7 @@ const axios = require("axios");
 const PartnerProfile = require("../models/PartnerProfile");
 const { getDashboardAggregates } = require("../services/dashboardStats");
 const Commodity = require("../models/Commodity");
+const FxRate = require("../models/FxRate");
 const { getMonthlyVolumeSeries } = require("../services/forecastData");
 
 const ML_BASE = "http://127.0.0.1:8000";
@@ -299,9 +300,43 @@ router.post("/forecast/volume", async (req, res) => {
 // POST /api/analytics/forecast/price-volatility — F7: priceHistory → volatility proxy
 router.post("/forecast/price-volatility", async (req, res) => {
   try {
-    const { commodity } = req.body;
+    const { fxPair, baseCurrency, quoteCurrency, commodity } = req.body;
+    const normalizedPair = String(
+      fxPair || `${baseCurrency || ""}/${quoteCurrency || ""}`,
+    ).toUpperCase();
+
+    if (normalizedPair.includes("/") && !normalizedPair.startsWith("/")) {
+      const [base, quote] = normalizedPair.split("/");
+      const doc = await FxRate.findOne({ pair: `${base}/${quote}` }).select(
+        "pair baseCurrency quoteCurrency history asOf source sourceUrl",
+      );
+      if (!doc) {
+        return res.status(404).json({ message: `FX pair ${base}/${quote} not found. Run syncFxRates first.` });
+      }
+      const rates = [...(doc.history || [])]
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .map((p) => p.rate)
+        .filter((x) => Number.isFinite(Number(x)) && Number(x) > 0);
+      if (rates.length < 3) {
+        return res.status(400).json({ message: "Need at least 3 FX history points" });
+      }
+      const response = await axios.post(`${ML_BASE}/api/forecast/price-volatility`, {
+        prices: rates,
+      });
+      return res.json({
+        ...response.data,
+        pair: doc.pair,
+        asOf: doc.asOf,
+        source: doc.source,
+        sourceUrl: doc.sourceUrl,
+        note: "Real FX volatility from historical exchange rates.",
+      });
+    }
+
     if (!commodity) {
-      return res.status(400).json({ message: "commodity (ObjectId) is required" });
+      return res
+        .status(400)
+        .json({ message: "Provide fxPair (preferred) or commodity for proxy volatility." });
     }
     const doc = await Commodity.findById(commodity).select("name priceHistory");
     if (!doc) return res.status(404).json({ message: "Commodity not found" });
@@ -316,7 +351,11 @@ router.post("/forecast/price-volatility", async (req, res) => {
     const response = await axios.post(`${ML_BASE}/api/forecast/price-volatility`, {
       prices,
     });
-    res.json({ ...response.data, commodityName: doc.name });
+    res.json({
+      ...response.data,
+      commodityName: doc.name,
+      note: "Commodity price proxy volatility (fallback; not FX).",
+    });
   } catch (err) {
     const msg =
       err.response?.data?.detail ||
@@ -324,6 +363,18 @@ router.post("/forecast/price-volatility", async (req, res) => {
       err.message ||
       "Volatility failed";
     res.status(err.response?.status || 500).json({ message: String(msg) });
+  }
+});
+
+router.get("/fx/pairs", async (_req, res) => {
+  try {
+    const pairs = await FxRate.find({})
+      .select("pair baseCurrency quoteCurrency currentRate asOf source verified")
+      .sort({ pair: 1 })
+      .lean();
+    res.json(pairs);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

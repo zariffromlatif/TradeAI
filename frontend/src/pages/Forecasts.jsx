@@ -21,6 +21,8 @@ function Forecasts() {
   const [error, setError] = useState("");
 
   const [commodity, setCommodity] = useState("");
+  const [fxPairs, setFxPairs] = useState([]);
+  const [fxPair, setFxPair] = useState("USD/BDT");
   const [country, setCountry] = useState("");
   const [tradeType, setTradeType] = useState("export");
   const [horizon, setHorizon] = useState("3");
@@ -34,11 +36,14 @@ function Forecasts() {
     Promise.all([
       axios.get(`${API}/commodities`),
       axios.get(`${API}/countries`),
+      axios.get(`${API}/analytics/fx/pairs`).catch(() => ({ data: [] })),
     ])
-      .then(([c, co]) => {
+      .then(([c, co, fx]) => {
         setCommodities(c.data);
         setCountries(co.data);
+        setFxPairs(fx.data || []);
         if (c.data.length) setCommodity(c.data[0]._id);
+        if (fx.data?.length) setFxPair(fx.data[0].pair);
       })
       .catch((err) => {
         setError(err.response?.data?.message || "Failed to load lists.");
@@ -66,7 +71,7 @@ function Forecasts() {
     try {
       const [vRes, pRes] = await Promise.all([
         axios.post(`${API}/analytics/forecast/volume`, bodyVol),
-        axios.post(`${API}/analytics/forecast/price-volatility`, { commodity }),
+        axios.post(`${API}/analytics/forecast/price-volatility`, { fxPair }),
       ]);
       setVolumeResult(vRes.data);
       setVolResult(pRes.data);
@@ -109,9 +114,8 @@ function Forecasts() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Forecasts</h1>
           <p className="text-neutral-400 text-sm">
-            Trade volume projection from records; volatility from commodity{" "}
-            <code className="text-[#8ab4ff]">priceHistory</code> (proxy, not
-            FX).
+            Trade volume projection from records; volatility from real{" "}
+            <code className="text-[#8ab4ff]">FX historical rates</code>.
           </p>
         </div>
       </div>
@@ -124,7 +128,7 @@ function Forecasts() {
 
       <form
         onSubmit={runForecast}
-        className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
       >
         <label className="flex flex-col gap-1 text-sm">
           <span className="text-neutral-400">Commodity</span>
@@ -157,6 +161,25 @@ function Forecasts() {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
+          <span className="text-neutral-400">FX pair</span>
+          <select
+            value={fxPair}
+            onChange={(e) => setFxPair(e.target.value)}
+            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
+            required
+          >
+            {fxPairs.length === 0 ? (
+              <option value="USD/BDT">USD/BDT (sync FX first)</option>
+            ) : (
+              fxPairs.map((p) => (
+                <option key={p.pair} value={p.pair}>
+                  {p.pair} {p.currentRate ? `(${p.currentRate})` : ""}
+                </option>
+              ))
+            )}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-sm">
           <span className="text-neutral-400">Trade type</span>
           <select
             value={tradeType}
@@ -178,7 +201,7 @@ function Forecasts() {
             className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
           />
         </label>
-        <div className="flex items-end sm:col-span-2 lg:col-span-4">
+        <div className="flex items-end sm:col-span-2 lg:col-span-5">
           <button
             type="submit"
             disabled={running}
@@ -235,13 +258,12 @@ function Forecasts() {
       {volResult && (
         <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-3">
           <h2 className="text-lg font-semibold text-neutral-100">
-            Price volatility proxy
+            FX volatility
           </h2>
           <p className="text-neutral-400 text-sm">
-            {volResult.commodityName && (
+            {volResult.pair && (
               <>
-                Commodity:{" "}
-                <span className="text-neutral-100">{volResult.commodityName}</span>
+                Pair: <span className="text-neutral-100">{volResult.pair}</span>
                 <br />
               </>
             )}
