@@ -14,6 +14,7 @@ from sklearn.linear_model import LinearRegression
 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+from pydantic import BaseModel, Field
 
 app = FastAPI(
     title="TradeAI ML Service",
@@ -75,6 +76,33 @@ class VolumeForecastRequest(BaseModel):
 
 class PriceVolatilityRequest(BaseModel):
     prices: list[float] = Field(..., min_length=3)
+
+class OptimalRangeRequest(BaseModel):
+    historical_prices: list[float] = Field(..., min_length=5)
+    fx_volatility: float = 0.0
+    shipping_cost_index: float = 1.0
+@app.post("/api/forecast/optimal-bid-range")
+async def optimal_bid_range(body: OptimalRangeRequest):
+    p = np.array([float(x) for x in body.historical_prices if np.isfinite(float(x))], dtype=float)
+    if len(p) < 5:
+        raise HTTPException(status_code=400, detail="Need at least 5 valid historical prices")
+    base_mean = float(np.mean(p))
+    base_std = float(np.std(p, ddof=1)) if len(p) > 1 else 0.0
+    # widen range under high FX volatility / shipping pressure
+    volatility_factor = 1.0 + min(max(body.fx_volatility, 0.0), 1.0) * 0.5
+    shipping_factor = min(max(body.shipping_cost_index, 0.7), 1.5)
+    adj_std = base_std * volatility_factor * shipping_factor
+    low = max(0.0, base_mean - 1.0 * adj_std)
+    high = base_mean + 1.0 * adj_std
+    return {
+        "recommended_min": round(low, 2),
+        "recommended_max": round(high, 2),
+        "reference_mean": round(base_mean, 2),
+        "reference_std": round(base_std, 4),
+        "confidence": "MEDIUM" if len(p) < 20 else "HIGH",
+        "note": "Heuristic optimal range based on historical bid prices, FX volatility and shipping index."
+    }
+
 
 INDICATOR_CONFIG = [
     {"field": "gdp_growth_rate",             "label": "GDP Growth Rate (%)",              "dimension": "economic_stability", "weight": 0.45, "invert": True,  "ref_min": -5.0,  "ref_max": 10.0},

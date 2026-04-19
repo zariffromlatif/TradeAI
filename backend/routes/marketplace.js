@@ -6,11 +6,22 @@ const MarketplaceQuote = require("../models/MarketplaceQuote");
 const Commodity = require("../models/Commodity");
 const Country = require("../models/Country");
 const Order = require("../models/Order");
+const { requireAuth, attachUser } = require("../middleware/auth");
+const { quoteProfitability, landedCost } = require("../services/quoteFinance");
+const { canTransition, assertCanBid, detectPriceAnomaly } = require("../services/rfqGuard");
+const { computeBidScore } = require("../services/bidScoring");
 const { evaluateSimulatedOrder } = require("../services/orderAnomaly");
 
 const router = express.Router();
 
-const RFQ_STATUSES = new Set(["open", "quoted", "awarded", "closed", "cancelled"]);
+const RFQ_STATES = new Set([
+  "draft",
+  "open",
+  "bidding",
+  "selection",
+  "completed",
+  "cancelled",
+]);
 const SETTLEMENT_STATUSES = new Set([
   "unpaid",
   "partially_settled",
@@ -24,16 +35,33 @@ function parsePager(query) {
   return { page, limit, skip: (page - 1) * limit };
 }
 
+// helper
+function pushStateHistory(rfq, from, to, by, reason = "") {
+  rfq.stateHistory.push({ from, to, by: by || null, reason, at: new Date() });
+}
+
 function getActorId(req) {
-  const actor = req.headers["x-user-id"];
-  return typeof actor === "string" && actor.trim() ? actor.trim() : null;
+  return req.auth?.sub || null;
+}
+
+function hasAnyRole(user, roles) {
+  return !!user?.role && roles.includes(user.role);
+}
+
+function isBuyerRole(user) {
+  return hasAnyRole(user, ["buyer", "admin", "user"]);
+}
+
+function isSellerRole(user) {
+  return hasAnyRole(user, ["seller", "admin"]);
 }
 
 router.get("/rfqs", async (req, res) => {
   try {
     const { page, limit, skip } = parsePager(req.query);
     const filter = {};
-    if (req.query.status && RFQ_STATUSES.has(req.query.status)) filter.status = req.query.status;
+    if (req.query.state && RFQ_STATES.has(req.query.state)) filter.state = req.query.state;
+    if (req.query.status && RFQ_STATES.has(req.query.status)) filter.state = req.query.status;
     if (req.query.commodity) filter.commodity = req.query.commodity;
     if (req.query.country) {
       filter.$or = [
@@ -58,8 +86,14 @@ router.get("/rfqs", async (req, res) => {
   }
 });
 
-router.post("/rfqs", async (req, res) => {
+router.post("/rfqs", requireAuth, attachUser, async (req, res) => {
   try {
+    if (!req.auth?.sub) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
+    if (!isBuyerRole(req.user)) {
+      return res.status(403).json({ message: "Only buyers can create RFQs." });
+    }
     const {
       title,
       specs,
@@ -70,6 +104,8 @@ router.post("/rfqs", async (req, res) => {
       unit,
       requiredIncoterm,
       preferredDeliveryWindow,
+      state,
+      biddingWindow,
     } = req.body;
 
     if (!title || !commodity || !originCountry || !destinationCountry || !targetQuantity || !unit) {
@@ -97,7 +133,8 @@ router.post("/rfqs", async (req, res) => {
       requiredIncoterm: String(requiredIncoterm || "FOB").trim(),
       preferredDeliveryWindow: String(preferredDeliveryWindow || "").trim(),
       createdBy: getActorId(req),
-      status: "open",
+      state: RFQ_STATES.has(state) ? state : "open",
+      biddingWindow: biddingWindow || { startsAt: null, endsAt: null },
     });
 
     const created = await MarketplaceRfq.findById(rfq._id)
@@ -118,7 +155,7 @@ router.get("/rfqs/:id", async (req, res) => {
 
     const quotes = await MarketplaceQuote.find({ rfqId: rfq._id })
       .sort({ createdAt: -1 })
-      .populate("sellerId", "name email");
+      .populate("supplierId", "name email");
 
     res.json({ rfq, quotes });
   } catch (err) {
@@ -126,22 +163,117 @@ router.get("/rfqs/:id", async (req, res) => {
   }
 });
 
-router.put("/rfqs/:id/status", async (req, res) => {
+router.patch("/rfqs/:id/state", requireAuth, attachUser, async (req, res) => {
   try {
-    const { status } = req.body;
-    if (!RFQ_STATUSES.has(status)) {
-      return res.status(400).json({ message: "Invalid RFQ status." });
+    if (!req.auth?.sub) {
+      return res.status(401).json({ message: "Authentication required." });
     }
-    const updated = await MarketplaceRfq.findByIdAndUpdate(
-      req.params.id,
-      { status },
-      { new: true },
-    )
-      .populate("commodity", "name category unit")
-      .populate("originCountry destinationCountry", "name code");
+    const { to, reason = "" } = req.body;
+    if (!RFQ_STATES.has(to)) {
+      return res.status(400).json({ message: "Invalid RFQ state." });
+    }
+    const rfq = await MarketplaceRfq.findById(req.params.id);
+    if (!rfq) return res.status(404).json({ message: "RFQ not found." });
+    if (
+      req.auth.role !== "admin" &&
+      (!rfq.createdBy || rfq.createdBy.toString() !== req.auth.sub)
+    ) {
+      return res.status(403).json({ message: "Only RFQ owner can change state." });
+    }
+    if (!canTransition(rfq.state, to)) {
+      return res
+        .status(409)
+        .json({ message: `Invalid transition ${rfq.state} -> ${to}` });
+    }
 
-    if (!updated) return res.status(404).json({ message: "RFQ not found." });
-    res.json(updated);
+    const from = rfq.state;
+    rfq.state = to;
+    if (to === "completed") rfq.completedAt = new Date();
+    pushStateHistory(rfq, from, to, getActorId(req), reason);
+    await rfq.save();
+
+    res.json(rfq);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post("/rfqs/:id/quotes", requireAuth, attachUser, async (req, res) => {
+  try {
+    if (!req.auth?.sub) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
+    if (!isSellerRole(req.user)) {
+      return res.status(403).json({ message: "Only sellers can submit quotes." });
+    }
+    const rfq = await MarketplaceRfq.findById(req.params.id).populate("commodity");
+    if (!rfq) return res.status(404).json({ message: "RFQ not found." });
+    const guard = assertCanBid(rfq);
+    if (!guard.ok) return res.status(409).json({ message: guard.message, code: guard.code });
+
+    const {
+      offeredPrice,
+      currency,
+      leadTimeDays,
+      minOrderQty,
+      notes,
+      validityDate,
+      freight,
+      insurance,
+      dutiesEstimate,
+      countryRiskScore,
+    } = req.body;
+    if (!offeredPrice || !leadTimeDays || !validityDate) {
+      return res.status(400).json({ message: "Missing required quote fields." });
+    }
+
+    const normalizedPrice = Number(offeredPrice);
+    const marketAvg = Number(rfq.commodity?.currentPrice || 0);
+    const anomaly = detectPriceAnomaly({
+      offeredPrice: normalizedPrice,
+      marketAvg,
+      thresholdPct: 30,
+    });
+    const score = computeBidScore({
+      quote: { offeredPrice: normalizedPrice, leadTimeDays: Number(leadTimeDays || 30) },
+      marketAvg,
+      countryRiskScore: Number(countryRiskScore || 50),
+    });
+
+    const quote = await MarketplaceQuote.create({
+      rfqId: rfq._id,
+      supplierId: getActorId(req),
+      offeredPrice: normalizedPrice,
+      currency: String(currency || "USD").trim(),
+      leadTimeDays: Number(leadTimeDays),
+      minOrderQty: Number(minOrderQty || 1),
+      notes: String(notes || "").trim(),
+      validityDate: new Date(validityDate),
+      freight: Number(freight || 0),
+      insurance: Number(insurance || 0),
+      dutiesEstimate: Number(dutiesEstimate || 0),
+      status: "submitted",
+      isPriceAnomaly: anomaly.isAnomaly,
+      anomalyPctFromMarket: anomaly.pct,
+      guardFlags: anomaly.isAnomaly
+        ? [
+            {
+              code: "PRICE_DEVIATION",
+              severity: "warning",
+              message: `Price deviation ${anomaly.pct}% vs market`,
+            },
+          ]
+        : [],
+      ...score,
+    });
+
+    if (rfq.state === "open") {
+      rfq.state = "bidding";
+      await rfq.save();
+    }
+
+    const created = await MarketplaceQuote.findById(quote._id).populate("supplierId", "name email");
+    res.status(201).json(created);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }
@@ -155,7 +287,7 @@ router.get("/rfqs/:id/quotes", async (req, res) => {
 
     const [items, total] = await Promise.all([
       MarketplaceQuote.find(filter)
-        .populate("sellerId", "name email")
+        .populate("supplierId", "name email")
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),
@@ -167,47 +299,10 @@ router.get("/rfqs/:id/quotes", async (req, res) => {
   }
 });
 
-router.post("/rfqs/:id/quotes", async (req, res) => {
-  try {
-    const rfq = await MarketplaceRfq.findById(req.params.id);
-    if (!rfq) return res.status(404).json({ message: "RFQ not found." });
-    if (rfq.status !== "open" && rfq.status !== "quoted") {
-      return res.status(400).json({ message: "RFQ is not open for new quotes." });
-    }
-
-    const { offeredPrice, currency, leadTimeDays, minOrderQty, notes, validityDate } = req.body;
-    if (!offeredPrice || !leadTimeDays || !validityDate) {
-      return res.status(400).json({ message: "Missing required quote fields." });
-    }
-
-    const quote = await MarketplaceQuote.create({
-      rfqId: rfq._id,
-      sellerId: getActorId(req),
-      offeredPrice: Number(offeredPrice),
-      currency: String(currency || "USD").trim(),
-      leadTimeDays: Number(leadTimeDays),
-      minOrderQty: Number(minOrderQty || 1),
-      notes: String(notes || "").trim(),
-      validityDate: new Date(validityDate),
-      status: "submitted",
-    });
-
-    if (rfq.status === "open") {
-      rfq.status = "quoted";
-      await rfq.save();
-    }
-
-    const created = await MarketplaceQuote.findById(quote._id).populate(
-      "sellerId",
-      "name email",
-    );
-    res.status(201).json(created);
-  } catch (err) {
-    res.status(400).json({ message: err.message });
+router.post("/quotes/:id/accept", requireAuth, attachUser, async (req, res) => {
+  if (!req.auth?.sub) {
+    return res.status(401).json({ message: "Authentication required." });
   }
-});
-
-router.post("/quotes/:id/accept", async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
@@ -226,9 +321,20 @@ router.post("/quotes/:id/accept", async (req, res) => {
       await session.abortTransaction();
       return res.status(404).json({ message: "RFQ not found for quote." });
     }
-    if (rfq.status === "awarded" || rfq.status === "closed" || rfq.status === "cancelled") {
+    if (rfq.state === "completed" || rfq.state === "cancelled") {
       await session.abortTransaction();
       return res.status(400).json({ message: "RFQ is already locked for awarding." });
+    }
+    if (
+      req.auth.role !== "admin" &&
+      (!rfq.createdBy || rfq.createdBy.toString() !== req.auth.sub)
+    ) {
+      await session.abortTransaction();
+      return res.status(403).json({ message: "Only RFQ owner can accept bids." });
+    }
+    if (!isBuyerRole(req.user)) {
+      await session.abortTransaction();
+      return res.status(403).json({ message: "Only buyers can accept bids." });
     }
 
     const commodityDoc = await Commodity.findById(rfq.commodity).session(session);
@@ -258,7 +364,7 @@ router.post("/quotes/:id/accept", async (req, res) => {
           rfqId: rfq._id,
           quoteId: quote._id,
           buyerId: rfq.createdBy,
-          sellerId: quote.sellerId,
+          sellerId: quote.supplierId,
           settlementStatus: "unpaid",
           settlementNotes: "Off-platform settlement initiated.",
           notes: rfq.specs || "",
@@ -277,7 +383,9 @@ router.post("/quotes/:id/accept", async (req, res) => {
     quote.status = "accepted";
     await quote.save({ session });
 
-    rfq.status = "awarded";
+    rfq.state = "selection";
+    rfq.selectedQuoteId = quote._id;
+    pushStateHistory(rfq, "bidding", "selection", getActorId(req), "quote_accepted");
     await rfq.save({ session });
 
     await session.commitTransaction();
@@ -290,10 +398,47 @@ router.post("/quotes/:id/accept", async (req, res) => {
   }
 });
 
-router.get("/deals", async (req, res) => {
+router.get("/rfqs/:id/comparison-matrix", async (req, res) => {
   try {
+    const quotes = await MarketplaceQuote.find({
+      rfqId: req.params.id,
+      status: { $in: ["submitted", "accepted"] },
+    })
+      .populate("supplierId", "name email")
+      .sort({ compositeScore: -1, offeredPrice: 1 });
+
+    const rows = quotes.map((q) => ({
+      quoteId: q._id,
+      supplier: q.supplierId?.name || "Unknown",
+      price: q.offeredPrice,
+      freight: q.freight,
+      insurance: q.insurance,
+      dutiesEstimate: q.dutiesEstimate,
+      leadTimeDays: q.leadTimeDays,
+      totalEstimated: Number(
+        (q.offeredPrice + q.freight + q.insurance + q.dutiesEstimate).toFixed(2),
+      ),
+      compositeScore: q.compositeScore,
+      guardFlags: q.guardFlags || [],
+      status: q.status,
+    }));
+
+    res.json({ rfqId: req.params.id, rows });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+router.get("/deals", requireAuth, attachUser, async (req, res) => {
+  try {
+    if (!req.auth?.sub) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
     const { page, limit, skip } = parsePager(req.query);
     const filter = { source: "rfq" };
+    if (req.auth.role !== "admin") {
+      filter.$or = [{ buyerId: req.auth.sub }, { sellerId: req.auth.sub }];
+    }
     if (req.query.settlementStatus && SETTLEMENT_STATUSES.has(req.query.settlementStatus)) {
       filter.settlementStatus = req.query.settlementStatus;
     }
@@ -316,15 +461,27 @@ router.get("/deals", async (req, res) => {
   }
 });
 
-router.put("/deals/:id/settlement", async (req, res) => {
+router.put("/deals/:id/settlement", requireAuth, attachUser, async (req, res) => {
   try {
+    if (!req.auth?.sub) {
+      return res.status(401).json({ message: "Authentication required." });
+    }
     const { settlementStatus, settlementNotes, proofRefs } = req.body;
     if (!SETTLEMENT_STATUSES.has(settlementStatus)) {
       return res.status(400).json({ message: "Invalid settlement status." });
     }
 
+    const accessFilter =
+      req.auth.role === "admin"
+        ? { _id: req.params.id, source: "rfq" }
+        : {
+            _id: req.params.id,
+            source: "rfq",
+            $or: [{ buyerId: req.auth.sub }, { sellerId: req.auth.sub }],
+          };
+
     const updated = await Order.findOneAndUpdate(
-      { _id: req.params.id, source: "rfq" },
+      accessFilter,
       {
         $set: {
           settlementStatus,
@@ -342,6 +499,24 @@ router.put("/deals/:id/settlement", async (req, res) => {
 
     if (!updated) return res.status(404).json({ message: "Deal not found." });
     res.json(updated);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post("/quotes/profitability", requireAuth, attachUser, async (req, res) => {
+  try {
+    const result = quoteProfitability(req.body || {});
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+router.post("/quotes/landed-cost", requireAuth, attachUser, async (req, res) => {
+  try {
+    const result = landedCost(req.body || {});
+    res.json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

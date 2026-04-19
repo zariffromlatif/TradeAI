@@ -1,8 +1,9 @@
 import { useState } from "react";
 import axios from "axios";
 import { Calculator } from "lucide-react";
+import { API_BASE_URL } from "../config/api";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 const inputClass =
   "bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 w-full";

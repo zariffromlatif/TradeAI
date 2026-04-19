@@ -8,8 +8,8 @@ const UserSchema = new mongoose.Schema(
     tier: { type: String, enum: ["free", "premium"], default: "free" },
     role: {
       type: String,
-      enum: ["user", "admin"],
-      default: "user",
+      enum: ["buyer", "seller", "admin", "user"],
+      default: "buyer",
     },
     stripeCustomerId: { type: String },
   },

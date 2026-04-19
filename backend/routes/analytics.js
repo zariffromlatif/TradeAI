@@ -26,6 +26,39 @@ router.get("/dashboard", async (req, res) => {
   }
 });
 
+router.get("/data-health", async (_req, res) => {
+  try {
+    const [lastTrade, lastCommodity, lastFx, verifiedTradeCount] = await Promise.all([
+      TradeRecord.findOne({ isVerified: true }).sort({ asOf: -1, ingestedAt: -1 }).select("asOf ingestedAt source"),
+      Commodity.findOne({ verified: true }).sort({ asOf: -1, ingestedAt: -1 }).select("asOf ingestedAt source"),
+      FxRate.findOne({ verified: true }).sort({ asOf: -1, ingestedAt: -1 }).select("asOf ingestedAt source"),
+      TradeRecord.countDocuments(REAL_TRADE_MATCH),
+    ]);
+
+    res.json({
+      trade: {
+        verifiedCount: verifiedTradeCount,
+        lastAsOf: lastTrade?.asOf || null,
+        lastIngestedAt: lastTrade?.ingestedAt || null,
+        source: lastTrade?.source || null,
+      },
+      commodity: {
+        lastAsOf: lastCommodity?.asOf || null,
+        lastIngestedAt: lastCommodity?.ingestedAt || null,
+        source: lastCommodity?.source || null,
+      },
+      fx: {
+        lastAsOf: lastFx?.asOf || null,
+        lastIngestedAt: lastFx?.ingestedAt || null,
+        source: lastFx?.source || null,
+      },
+      status: verifiedTradeCount > 0 ? "healthy" : "degraded",
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 // GET /api/analytics/trade-balance
 router.get("/trade-balance", async (req, res) => {
   try {
@@ -294,6 +327,24 @@ router.post("/forecast/volume", async (req, res) => {
       err.message ||
       "Forecast failed";
     res.status(err.response?.status || 500).json({ message: String(msg) });
+  }
+});
+
+router.post("/forecast/optimal-bid-range", async (req, res) => {
+  try {
+    const response = await axios.post(
+      `${ML_BASE}/api/forecast/optimal-bid-range`,
+      req.body,
+    );
+    res.json(response.data);
+  } catch (err) {
+    res.status(err.response?.status || 500).json({
+      message:
+        err.response?.data?.detail ||
+        err.response?.data?.message ||
+        err.message ||
+        "Optimal range forecast failed",
+    });
   }
 });
 

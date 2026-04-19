@@ -23,8 +23,9 @@ import {
   Cell,
   Legend,
 } from "recharts";
+import { ANALYTICS_API_BASE_URL } from "../config/api";
 
-const API_BASE = "http://localhost:5000/api/analytics";
+const API_BASE = ANALYTICS_API_BASE_URL;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

@@ -1,6 +1,8 @@
 # TradeAI — Backend API
 
-Built by **Member A (Data Architect)**. This is the foundation for the entire project.
+Current backend supports analytics, real-data sync, RFQ marketplace flows, strict JWT role/ownership authorization, and ML-bridged forecasting/risk APIs.
+
+> This file is a quick backend reference. Full project docs are in the root `README.md`.
 
 ---
 
@@ -28,6 +30,11 @@ Create a file named `.env` inside the `backend/` folder:
 
 ```
 MONGO_URI=mongodb+srv://<username>:<password>@cluster0.tsjkfiq.mongodb.net/tradeai?appName=Cluster0
+JWT_SECRET=replace_with_strong_secret
+ADMIN_INVITE_CODE=replace_with_admin_invite_code
+JWT_ACCESS_EXPIRES_IN=1d
+JWT_REMEMBER_EXPIRES_IN=14d
+CORS_ORIGINS=http://localhost:5173
 ```
 
 > Ask **Member A** for the actual MongoDB Atlas credentials. Do NOT commit `.env` to git.
@@ -95,7 +102,7 @@ TradeAI/
 
 ---
 
-## Available API Endpoints
+## Core API Endpoints
 
 Base URL: `http://localhost:5000`
 
@@ -129,12 +136,19 @@ Base URL: `http://localhost:5000`
 | PUT    | `/api/trade/:id` | Update a trade record                                            |
 | DELETE | `/api/trade/:id` | Delete a trade record                                            |
 
-### Analytics (Feature 1)
+### Analytics + Forecasts
 
-| Method | Endpoint                       | Description                                      |
-| ------ | ------------------------------ | ------------------------------------------------ |
-| GET    | `/api/analytics/dashboard`     | Top 5 exporters + top 5 importers by total value |
-| GET    | `/api/analytics/risk/:country` | Risk score from ML service (e.g. `/risk/BD`)     |
+| Method | Endpoint                                | Description |
+| ------ | ---------------------------------------- | ----------- |
+| GET    | `/api/analytics/dashboard`               | Top exporters/importers |
+| GET    | `/api/analytics/data-health`             | Data freshness status for trade, commodity, FX |
+| GET    | `/api/analytics/trade-balance`           | Time-series trade balance |
+| GET    | `/api/analytics/country/:code`           | Country aggregates / monthly data |
+| GET    | `/api/analytics/compare`                 | Dual-country comparison |
+| POST   | `/api/analytics/forecast/volume`         | Trade-volume forecast |
+| POST   | `/api/analytics/forecast/price-volatility` | FX volatility (real FX pair, fallback commodity proxy) |
+| GET    | `/api/analytics/fx/pairs`                | Available synced FX pairs |
+| GET/POST | `/api/analytics/risk/:country`, `/api/analytics/risk-score` | ML risk score bridge |
 
 ---
 
@@ -184,7 +198,44 @@ Base URL: `http://localhost:5000`
 
 ---
 
-## Instructions Per Member
+### Marketplace (Feature 10 evolution + authz hardening)
+
+| Method | Endpoint | Description |
+| ------ | -------- | ----------- |
+| GET/POST | `/api/marketplace/rfqs` | List and create RFQs (create requires buyer/admin JWT) |
+| GET/PATCH | `/api/marketplace/rfqs/:id`, `/api/marketplace/rfqs/:id/state` | RFQ detail and state transition (owner/admin) |
+| GET/POST | `/api/marketplace/rfqs/:id/quotes` | List and submit quotes (seller/admin) |
+| POST | `/api/marketplace/quotes/:id/accept` | Accept one quote and create deal (RFQ owner buyer/admin) |
+| GET | `/api/marketplace/deals` | List awarded RFQ deals (caller-scoped unless admin) |
+| PUT | `/api/marketplace/deals/:id/settlement` | Update off-platform settlement state (deal parties/admin) |
+
+Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
+
+---
+
+## Operational scripts
+
+| Script | Purpose |
+| ------ | ------- |
+| `node scripts/syncCommodityPrices.js` | Sync real commodity prices |
+| `node scripts/syncTradeFlows.js` | Sync real trade flow records |
+| `node scripts/syncFxRates.js` | Sync real FX historical series |
+| `node scripts/verifyMarketplaceFlow.js` | Verify RFQ→quote→deal lifecycle |
+| `node scripts/verifyMarketplaceGuards.js` | Verify RFQ state transitions + bid guard rules |
+| `node scripts/verifyPartnerProfiles.js` | Verify partner profile metrics |
+
+---
+
+## Notes
+
+- Use `backend/.env` for `MONGO_URI`, JWT, Stripe, and Comtrade settings.
+- Configure `CORS_ORIGINS` in production to allow only deployed frontend domains.
+- Forecast/risk endpoints that proxy ML require FastAPI running on `127.0.0.1:8000`.
+- Legacy `/api/orders` remains available; marketplace deals are stored with `Order.source = "rfq"`.
+
+---
+
+## Legacy member notes
 
 ### Member B (Frontend)
 

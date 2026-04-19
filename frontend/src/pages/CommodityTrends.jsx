@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 import {
   LineChart,
   Line,
@@ -10,7 +11,7 @@ import {
   CartesianGrid,
 } from "recharts";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 function CommodityTrends() {
   const [commodities, setCommodities] = useState([]);

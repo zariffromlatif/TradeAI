@@ -3,7 +3,11 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js",
+    "seed": "node seed.js",
+    "verify:marketplace:flow": "node scripts/verifyMarketplaceFlow.js",
+    "verify:marketplace:guards": "node scripts/verifyMarketplaceGuards.js",
+    "test": "npm run verify:marketplace:flow && npm run verify:marketplace:guards"
   },
   "keywords": [],
   "author": "",

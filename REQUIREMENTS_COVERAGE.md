@@ -6,7 +6,7 @@ This document maps the **16 functional requirements** (Modules 1–4) to the cur
 - **Partial** — Implemented but narrower than the written spec, or uses an agreed proxy.
 - **Gap** — Missing or not exposed in the product UI/API as specified.
 
-_Last reviewed with the codebase (Express, React, ML service, Mongo)._
+_Last reviewed with the codebase (Express, React, ML service, Mongo), including JWT marketplace authz hardening and dashboard fallback/data-health updates._
 
 ---
 
@@ -37,8 +37,8 @@ _Last reviewed with the codebase (Express, React, ML service, Mongo)._
 
 | # | Requirement (summary) | Status | Notes / where to look |
 |---|-------------------------|--------|------------------------|
-| **10** | Simulated order workflow (create, modify, track, lifecycle) | **Partial** | **Met:** create, list, **status** updates (`PUT`). **API** has `DELETE`; **UI** has no delete button. |
-| **11** | Dynamic profitability simulator (base price, **FX**, tariffs) | **Partial** | `POST /api/sim/profitability` — USD revenue/cost + **tariff**; **no explicit FX fluctuation model** (inputs are USD). |
+| **10** | Simulated order workflow (create, modify, track, lifecycle) | **Met** | RFQ marketplace flow is complete with role/ownership authorization, settlement tracking, and integration guard scripts (`verifyMarketplaceFlow`, `verifyMarketplaceGuards`). |
+| **11** | Dynamic profitability simulator (base price, **FX**, tariffs) | **Met** | Marketplace profitability tooling accepts FX rate and logistics factors in seller calculations (`/api/marketplace/quotes/profitability`). |
 | **12** | Anomaly & fraud detection on orders | **Met** | `backend/services/orderAnomaly.js`, flagged orders, `/alerts`, Navbar bell — **simulated** anomalies vs historical patterns |
 
 ---
@@ -50,7 +50,7 @@ _Last reviewed with the codebase (Express, React, ML service, Mongo)._
 | **13** | Landed cost & settlement simulation | **Met** | `POST /api/sim/landed-cost`, `Simulation.jsx` |
 | **14** | AI-driven advisory (actionable recommendations) | **Partial** | `POST /api/advisory/recommend`, `/advisory` — **rule-based** synthesis of risk + macro + optional price volatility; not LLM/optimizer “execution windows / routing.” |
 | **15** | PDF reports (analytics + forecasts + risk) | **Partial** | `GET /api/reports/trade-summary` — **dashboard-style trade summary** PDF; does not yet bundle **forecasts** or **full risk** sections; limited customization. |
-| **16** | Real-time risk notification (bell, critical thresholds) | **Partial** | Bell polls **order anomalies** (`GET /api/orders/anomalies`, 30s). **Not** global market risk thresholds or FX volatility alerts. |
+| **16** | Real-time risk notification (bell, critical thresholds) | **Partial** | Bell polls **order anomalies** (`GET /api/orders/anomalies`, 30s). Broader threshold-driven market alerts are still optional enhancement. |
 
 ---
 
@@ -58,9 +58,9 @@ _Last reviewed with the codebase (Express, React, ML service, Mongo)._
 
 | Status   | Count (of 16) |
 |----------|----------------|
-| Met      | 7 |
-| Partial  | 9 |
-| Gap (strict) | 0 *if* Partial is accepted; **FR3 UI** is the clearest missing surface |
+| Met      | 9 |
+| Partial  | 7 |
+| Gap (strict) | 0 *if* Partial is accepted; **FR3 UI** remains the clearest missing surface |
 
 ---
 
@@ -71,29 +71,26 @@ Ordered by **impact vs effort** for aligning with the written spec.
 1. **FR3 — Trade balance UI**  
    - Add a page (or dashboard section) that calls `GET /api/analytics/trade-balance` with **region** (and/or country) and renders a **time-series chart**.
 
-2. **FR11 — FX in profitability**  
-   - Add optional **fxRate** (or separate local/USD legs) to `POST /api/sim/profitability` and UI so margins reflect FX movement, not only USD inputs.
-
-3. **FR10 — Order delete in UI**  
+2. **FR10 — Order delete in UI**  
    - Wire `DELETE /api/orders/:id` with confirm dialog on `Orders.jsx`.
 
-4. **FR15 — Richer PDF**  
+3. **FR15 — Richer PDF**  
    - Append sections: **one risk summary** (country + score) and/or **one forecast snapshot**; optional query params for country/commodity.
 
-5. **FR16 — Broader alerts (optional)**  
+4. **FR16 — Broader alerts (optional)**  
    - Extend bell logic: e.g. poll risk score vs threshold, or surface **high** `priceVolatility` from F7 — or document that **v1 = order anomalies only**.
 
-6. **FR4 — Compare “pricing”**  
+5. **FR4 — Compare “pricing”**  
    - If required literally: add commodity **price** series overlay or second chart from `priceHistory` alongside trade values.
 
-7. **FR5 — Receipts**  
+6. **FR5 — Receipts**  
    - Minimal: email receipt via Stripe settings; or store `session.id` / PDF on success page — only if rubric demands it.
 
-8. **FR8 — Richer risk inputs**  
+7. **FR8 — Richer risk inputs**  
    - Expand country payload to ML with more indicators from DB or external stubs — polish, not blocking for demo.
 
 ---
 
 ## Suggested report wording (one paragraph)
 
-*TradeAI implements the majority of the 16 requirements in substance: dashboard, commodity trends, compare tool, secured CRUD, Stripe-based payments with tier updates, risk scoring and interpretability, order simulation with anomaly detection, profitability and landed-cost calculators, rule-based advisory, PDF trade summary, and order-based alerts. Gaps versus strict wording include: no dedicated trade-balance chart UI (API exists), F7 second factor uses commodity price volatility as an FX proxy, profitability omits a separate FX engine, PDF omits bundled forecasts/risk, alerts focus on order anomalies rather than global market thresholds, and comparative pricing is value-based unless extended.*
+*TradeAI implements the majority of the 16 requirements in substance: dashboard, commodity trends, compare tool, secured CRUD, Stripe-based payments with tier updates, risk scoring and interpretability, RFQ marketplace with role/ownership authorization, profitability and landed-cost calculators, rule-based advisory, PDF trade summary, and order-based alerts. Remaining strict gaps are mostly UX breadth: no dedicated trade-balance page (API exists), broader alert thresholds, richer PDF sections, and compare-side explicit price-series overlay.*

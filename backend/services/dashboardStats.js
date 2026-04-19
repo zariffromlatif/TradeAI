@@ -9,9 +9,12 @@ async function getDashboardAggregates() {
     isVerified: true,
     source: { $in: ["un_comtrade", "official_api"] },
   };
+  const verifiedCount = await TradeRecord.countDocuments(realTradeMatch);
+  const matchBase =
+    verifiedCount > 0 ? realTradeMatch : {};
 
   const exportStats = await TradeRecord.aggregate([
-    { $match: { ...realTradeMatch, type: "export" } },
+    { $match: { ...matchBase, type: "export" } },
     { $group: { _id: "$country", totalExportValue: { $sum: "$value" } } },
     { $sort: { totalExportValue: -1 } },
     { $limit: 5 },
@@ -28,7 +31,7 @@ async function getDashboardAggregates() {
   ]);
 
   const importStats = await TradeRecord.aggregate([
-    { $match: { ...realTradeMatch, type: "import" } },
+    { $match: { ...matchBase, type: "import" } },
     { $group: { _id: "$country", totalImportValue: { $sum: "$value" } } },
     { $sort: { totalImportValue: -1 } },
     { $limit: 5 },
@@ -45,13 +48,16 @@ async function getDashboardAggregates() {
   ]);
 
   const countriesTracked = await Country.countDocuments();
-  const tradeRecordCount = await TradeRecord.countDocuments(realTradeMatch);
+  const tradeRecordCount = verifiedCount;
+  const totalTradeRecordCount = await TradeRecord.countDocuments();
 
   return {
     topExporters: exportStats,
     topImporters: importStats,
     countriesTracked,
     tradeRecordCount,
+    totalTradeRecordCount,
+    fallbackMode: verifiedCount === 0 ? "all_records" : "verified_only",
   };
 }
 

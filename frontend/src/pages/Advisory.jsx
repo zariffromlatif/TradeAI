@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { Lightbulb, Loader2 } from "lucide-react";
+import { API_BASE_URL } from "../config/api";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 const severityStyles = {
   high: "border-[#8ab4ff]/50 bg-[#8ab4ff]/10 text-[#d7e5ff]",

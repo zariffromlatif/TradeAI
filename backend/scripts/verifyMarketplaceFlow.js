@@ -3,7 +3,6 @@ const axios = require("axios");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
 const API_BASE = process.env.API_BASE_URL || "http://localhost:5000/api";
-const ACTOR = process.env.MARKETPLACE_TEST_USER_ID || "000000000000000000000001";
 
 function assert(condition, message) {
   if (!condition) {
@@ -27,8 +26,52 @@ async function getSeedRefs() {
   };
 }
 
+async function ensureUser({ name, email, password, role }) {
+  try {
+    await axios.post(`${API_BASE}/auth/register`, {
+      name,
+      email,
+      password,
+      role,
+    });
+  } catch (err) {
+    const message = err.response?.data?.message || "";
+    if (!String(message).includes("Email already registered")) {
+      throw err;
+    }
+  }
+  const loginRes = await axios.post(`${API_BASE}/auth/login`, { email, password });
+  return {
+    token: loginRes.data?.token,
+    user: loginRes.data?.user,
+  };
+}
+
 async function run() {
   const refs = await getSeedRefs();
+  const password = "Password123!";
+  const runTag = Date.now().toString();
+  const buyer = await ensureUser({
+    name: "Buyer Verify",
+    email: `buyer.verify.${runTag}@tradeai.local`,
+    password,
+    role: "buyer",
+  });
+  const sellerA = await ensureUser({
+    name: "Seller A Verify",
+    email: `seller.a.verify.${runTag}@tradeai.local`,
+    password,
+    role: "seller",
+  });
+  const sellerB = await ensureUser({
+    name: "Seller B Verify",
+    email: `seller.b.verify.${runTag}@tradeai.local`,
+    password,
+    role: "seller",
+  });
+  const buyerHeaders = { Authorization: `Bearer ${buyer.token}` };
+  const sellerAHeaders = { Authorization: `Bearer ${sellerA.token}` };
+  const sellerBHeaders = { Authorization: `Bearer ${sellerB.token}` };
 
   const rfqRes = await axios.post(
     `${API_BASE}/marketplace/rfqs`,
@@ -43,7 +86,7 @@ async function run() {
       requiredIncoterm: "FOB",
       preferredDeliveryWindow: "Q3",
     },
-    { headers: { "x-user-id": ACTOR } },
+    { headers: buyerHeaders },
   );
   const rfq = rfqRes.data;
   assert(rfq?._id, "RFQ creation failed.");
@@ -59,7 +102,7 @@ async function run() {
         notes: "Verification quote A",
         validityDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       },
-      { headers: { "x-user-id": "00000000000000000000000a" } },
+      { headers: sellerAHeaders },
     ),
     axios.post(
       `${API_BASE}/marketplace/rfqs/${rfq._id}/quotes`,
@@ -71,27 +114,35 @@ async function run() {
         notes: "Verification quote B",
         validityDate: new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString(),
       },
-      { headers: { "x-user-id": "00000000000000000000000b" } },
+      { headers: sellerBHeaders },
     ),
   ]);
   const acceptedCandidate = q2Res.data;
   assert(q1Res.data?._id && acceptedCandidate?._id, "Quote creation failed.");
 
-  const acceptRes = await axios.post(`${API_BASE}/marketplace/quotes/${acceptedCandidate._id}/accept`);
+  const acceptRes = await axios.post(
+    `${API_BASE}/marketplace/quotes/${acceptedCandidate._id}/accept`,
+    {},
+    { headers: buyerHeaders },
+  );
   const createdOrder = acceptRes.data?.order;
   assert(createdOrder?._id, "Order creation during quote acceptance failed.");
 
   const detailRes = await axios.get(`${API_BASE}/marketplace/rfqs/${rfq._id}`);
   const detail = detailRes.data;
-  assert(detail?.rfq?.status === "awarded", "RFQ status should become awarded.");
+  assert(detail?.rfq?.state === "selection", "RFQ state should become selection.");
   const acceptedCount = (detail?.quotes || []).filter((q) => q.status === "accepted").length;
   assert(acceptedCount === 1, "Exactly one quote must be accepted.");
 
-  const settlementRes = await axios.put(`${API_BASE}/marketplace/deals/${createdOrder._id}/settlement`, {
-    settlementStatus: "partially_settled",
-    settlementNotes: "Verification partial settlement.",
-    proofRefs: ["bank-advice-1.pdf"],
-  });
+  const settlementRes = await axios.put(
+    `${API_BASE}/marketplace/deals/${createdOrder._id}/settlement`,
+    {
+      settlementStatus: "partially_settled",
+      settlementNotes: "Verification partial settlement.",
+      proofRefs: ["bank-advice-1.pdf"],
+    },
+    { headers: buyerHeaders },
+  );
   assert(
     settlementRes.data?.settlementStatus === "partially_settled",
     "Settlement status update failed.",

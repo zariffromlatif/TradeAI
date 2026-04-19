@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Package, MessagesSquare, Handshake, AlertTriangle } from "lucide-react";
+import BidComparisonMatrix from "../components/BidComparisonMatrix";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../config/api";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
-const RFQ_STATUS_OPTIONS = ["open", "quoted", "awarded", "closed", "cancelled"];
+const RFQ_STATUS_OPTIONS = ["draft", "open", "bidding", "selection", "completed", "cancelled"];
 const SETTLEMENT_OPTIONS = ["unpaid", "partially_settled", "settled", "disputed"];
-const ACTIVE_USER_ID = "000000000000000000000001";
-
 function Orders() {
+  const { token, user } = useAuth();
   const [activeTab, setActiveTab] = useState("rfqs");
   const [rfqs, setRfqs] = useState([]);
   const [deals, setDeals] = useState([]);
@@ -17,10 +19,13 @@ function Orders() {
   const [selectedRfqId, setSelectedRfqId] = useState("");
   const [rfqDetail, setRfqDetail] = useState(null);
   const [quotes, setQuotes] = useState([]);
+  const [comparisonRows, setComparisonRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submittingRfq, setSubmittingRfq] = useState(false);
   const [submittingQuote, setSubmittingQuote] = useState(false);
   const [error, setError] = useState("");
+  const [optimalRange, setOptimalRange] = useState(null);
+  const [profitResult, setProfitResult] = useState(null);
 
   const [rfqForm, setRfqForm] = useState({
     title: "",
@@ -39,6 +44,11 @@ function Orders() {
     currency: "USD",
     leadTimeDays: "",
     minOrderQty: "1",
+    freight: "0",
+    insurance: "0",
+    dutiesEstimate: "0",
+    unitProcurementCost: "",
+    fxRate: "1",
     validityDate: "",
     notes: "",
   });
@@ -49,6 +59,7 @@ function Orders() {
     country: "",
     settlementStatus: "",
   });
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
 
   const loadRfqs = () => {
     const params = {};
@@ -57,7 +68,10 @@ function Orders() {
     if (filters.country) params.country = filters.country;
 
     return axios
-      .get(`${API}/marketplace/rfqs`, { params })
+      .get(`${API}/marketplace/rfqs`, {
+        params: { ...params, state: params.status },
+        headers: authHeaders,
+      })
       .then((res) => setRfqs(res.data.items || []))
       .catch((err) => {
         console.error(err);
@@ -69,7 +83,7 @@ function Orders() {
     const params = {};
     if (filters.settlementStatus) params.settlementStatus = filters.settlementStatus;
     return axios
-      .get(`${API}/marketplace/deals`, { params })
+      .get(`${API}/marketplace/deals`, { params, headers: authHeaders })
       .then((res) => setDeals(res.data.items || []))
       .catch((err) => {
         console.error(err);
@@ -84,15 +98,49 @@ function Orders() {
       return Promise.resolve();
     }
     return axios
-      .get(`${API}/marketplace/rfqs/${rfqId}`)
+      .get(`${API}/marketplace/rfqs/${rfqId}`, { headers: authHeaders })
       .then((res) => {
         setRfqDetail(res.data.rfq);
         setQuotes(res.data.quotes || []);
+        setOptimalRange(null);
       })
+      .then(() =>
+        axios
+          .get(`${API}/marketplace/rfqs/${rfqId}/comparison-matrix`, { headers: authHeaders })
+          .then((matrixRes) => setComparisonRows(matrixRes.data.rows || [])),
+      )
       .catch((err) => {
         console.error(err);
         setError(err.response?.data?.message || "Failed to load RFQ detail.");
       });
+  };
+
+  const loadOptimalRange = async (rfq) => {
+    try {
+      const commodityObj = commodities.find((c) => c._id === rfq?.commodity?._id);
+      const historicalPrices = (commodityObj?.priceHistory || [])
+        .map((p) => Number(p.price))
+        .filter((x) => Number.isFinite(x) && x > 0)
+        .slice(-24);
+
+      if (historicalPrices.length < 5) {
+        setOptimalRange({
+          note: "Need at least 5 historical price points for optimal range.",
+        });
+        return;
+      }
+      const fxVol = 0.25;
+      const response = await axios.post(`${API}/analytics/forecast/optimal-bid-range`, {
+        historical_prices: historicalPrices,
+        fx_volatility: fxVol,
+        shipping_cost_index: 1.0,
+      });
+      setOptimalRange(response.data);
+    } catch (err) {
+      setOptimalRange({
+        note: err.response?.data?.message || "Optimal range service unavailable.",
+      });
+    }
   };
 
   useEffect(() => {
@@ -128,15 +176,18 @@ function Orders() {
 
   useEffect(() => {
     if (selectedRfqId) {
-      loadRfqDetail(selectedRfqId);
+      loadRfqDetail(selectedRfqId).then(() => {
+        const selected = rfqs.find((x) => x._id === selectedRfqId);
+        if (selected) loadOptimalRange(selected);
+      });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedRfqId]);
+  }, [selectedRfqId, rfqs]);
 
-  const rfqStatusBadge = (status) => {
-    if (status === "awarded") return "text-[#8ab4ff]";
-    if (status === "quoted") return "text-neutral-200";
-    if (status === "closed" || status === "cancelled") return "text-neutral-500";
+  const rfqStatusBadge = (state) => {
+    if (state === "selection" || state === "completed") return "text-[#8ab4ff]";
+    if (state === "bidding" || state === "open") return "text-neutral-200";
+    if (state === "cancelled") return "text-neutral-500";
     return "text-neutral-300";
   };
 
@@ -160,7 +211,7 @@ function Orders() {
         targetQuantity: Number(rfqForm.targetQuantity),
       };
       const res = await axios.post(`${API}/marketplace/rfqs`, payload, {
-        headers: { "x-user-id": ACTIVE_USER_ID },
+        headers: authHeaders,
       });
       setRfqForm((f) => ({
         ...f,
@@ -191,14 +242,18 @@ function Orders() {
           offeredPrice: Number(quoteForm.offeredPrice),
           leadTimeDays: Number(quoteForm.leadTimeDays),
           minOrderQty: Number(quoteForm.minOrderQty),
+          freight: Number(quoteForm.freight),
+          insurance: Number(quoteForm.insurance),
+          dutiesEstimate: Number(quoteForm.dutiesEstimate),
         },
-        { headers: { "x-user-id": ACTIVE_USER_ID } },
+        { headers: authHeaders },
       );
       setQuoteForm((f) => ({
         ...f,
         offeredPrice: "",
         leadTimeDays: "",
         notes: "",
+        unitProcurementCost: "",
       }));
       await Promise.all([loadRfqDetail(selectedRfqId), loadRfqs()]);
     } catch (err) {
@@ -208,9 +263,33 @@ function Orders() {
     }
   };
 
+  const simulateProfit = async () => {
+    if (!rfqDetail) return;
+    try {
+      const response = await axios.post(
+        `${API}/marketplace/quotes/profitability`,
+        {
+          unitSellPrice: Number(quoteForm.offeredPrice || 0),
+          unitProcurementCost: Number(quoteForm.unitProcurementCost || 0),
+          qty: Number(rfqDetail.targetQuantity || 0),
+          fxRate: Number(quoteForm.fxRate || 1),
+          freight: Number(quoteForm.freight || 0),
+          insurance: Number(quoteForm.insurance || 0),
+          duties: Number(quoteForm.dutiesEstimate || 0),
+        },
+        { headers: authHeaders },
+      );
+      setProfitResult(response.data);
+    } catch (err) {
+      setError(err.response?.data?.message || "Profit simulation failed.");
+    }
+  };
+
   const acceptQuote = async (quoteId) => {
     try {
-      await axios.post(`${API}/marketplace/quotes/${quoteId}/accept`);
+      await axios.post(`${API}/marketplace/quotes/${quoteId}/accept`, null, {
+        headers: authHeaders,
+      });
       await Promise.all([loadRfqDetail(selectedRfqId), loadRfqs(), loadDeals()]);
       setActiveTab("deals");
     } catch (err) {
@@ -220,10 +299,14 @@ function Orders() {
 
   const updateSettlement = async (dealId, settlementStatus) => {
     try {
-      await axios.put(`${API}/marketplace/deals/${dealId}/settlement`, {
-        settlementStatus,
-        settlementNotes: `Updated to ${settlementStatus} from marketplace UI.`,
-      });
+      await axios.put(
+        `${API}/marketplace/deals/${dealId}/settlement`,
+        {
+          settlementStatus,
+          settlementNotes: `Updated to ${settlementStatus} from marketplace UI.`,
+        },
+        { headers: authHeaders },
+      );
       await loadDeals();
     } catch (err) {
       setError(err.response?.data?.message || "Settlement update failed.");
@@ -479,8 +562,8 @@ function Orders() {
                           <td className="px-4 py-3 text-right text-neutral-100">
                             {rfq.targetQuantity?.toLocaleString()} {rfq.unit}
                           </td>
-                          <td className={`px-4 py-3 capitalize ${rfqStatusBadge(rfq.status)}`}>
-                            {rfq.status}
+                          <td className={`px-4 py-3 capitalize ${rfqStatusBadge(rfq.state)}`}>
+                            {rfq.state}
                           </td>
                         </tr>
                       ))
@@ -545,6 +628,56 @@ function Orders() {
                         placeholder="Min order qty"
                       />
                       <input
+                        name="freight"
+                        value={quoteForm.freight}
+                        onChange={handleQuoteFormChange}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="bg-[#171717] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-neutral-100"
+                        placeholder="Freight"
+                      />
+                      <input
+                        name="insurance"
+                        value={quoteForm.insurance}
+                        onChange={handleQuoteFormChange}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="bg-[#171717] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-neutral-100"
+                        placeholder="Insurance"
+                      />
+                      <input
+                        name="dutiesEstimate"
+                        value={quoteForm.dutiesEstimate}
+                        onChange={handleQuoteFormChange}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="bg-[#171717] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-neutral-100"
+                        placeholder="Duties estimate"
+                      />
+                      <input
+                        name="unitProcurementCost"
+                        value={quoteForm.unitProcurementCost}
+                        onChange={handleQuoteFormChange}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        className="bg-[#171717] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-neutral-100"
+                        placeholder="Procurement cost / unit"
+                      />
+                      <input
+                        name="fxRate"
+                        value={quoteForm.fxRate}
+                        onChange={handleQuoteFormChange}
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        className="bg-[#171717] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-neutral-100"
+                        placeholder="FX rate"
+                      />
+                      <input
                         name="validityDate"
                         value={quoteForm.validityDate}
                         onChange={handleQuoteFormChange}
@@ -560,11 +693,37 @@ function Orders() {
                         placeholder="Quote notes"
                       />
                       <div className="md:col-span-2 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={simulateProfit}
+                          className="btn-ui btn-secondary mr-2"
+                        >
+                          Simulate margin
+                        </button>
                         <button type="submit" disabled={submittingQuote} className="btn-ui btn-primary">
                           {submittingQuote ? "Submitting…" : "Submit quote"}
                         </button>
                       </div>
                     </form>
+                    {profitResult && (
+                      <div className="rounded-lg border border-[#2a2a2a] bg-[#171717] px-3 py-2 text-xs text-neutral-300">
+                        Margin {profitResult.marginPct}% · Gross{" "}
+                        {profitResult.grossMargin?.toLocaleString?.()} · Revenue{" "}
+                        {profitResult.revenueBase?.toLocaleString?.()}
+                      </div>
+                    )}
+                    {optimalRange && (
+                      <div className="rounded-lg border border-[#2a2a2a] bg-[#171717] px-3 py-2 text-xs text-neutral-300">
+                        {optimalRange.recommended_min != null ? (
+                          <>
+                            Optimal price range: {optimalRange.recommended_min} -{" "}
+                            {optimalRange.recommended_max}
+                          </>
+                        ) : (
+                          optimalRange.note
+                        )}
+                      </div>
+                    )}
 
                     <div className="space-y-2">
                       <h4 className="text-sm font-medium text-neutral-200">Quotes</h4>
@@ -582,14 +741,18 @@ function Orders() {
                                   {quote.currency} {Number(quote.offeredPrice || 0).toLocaleString()} / unit
                                 </p>
                                 <p className="text-xs text-neutral-500">
-                                  Lead time {quote.leadTimeDays} days • status {quote.status}
+                                  Lead {quote.leadTimeDays} days • status {quote.status}
                                 </p>
                               </div>
-                              {quote.status === "submitted" && rfqDetail.status !== "awarded" ? (
+                              {quote.status === "submitted" &&
+                              !["selection", "completed", "cancelled"].includes(rfqDetail.state) ? (
                                 <button
                                   type="button"
                                   onClick={() => acceptQuote(quote._id)}
                                   className="btn-ui btn-secondary !h-8"
+                                  disabled={
+                                    !["buyer", "admin", "user"].includes(user?.role || "")
+                                  }
                                 >
                                   Accept
                                 </button>
@@ -598,6 +761,13 @@ function Orders() {
                           ))
                         )}
                       </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium text-neutral-200">
+                        Bid comparison matrix
+                      </h4>
+                      <BidComparisonMatrix rows={comparisonRows} onSelect={acceptQuote} />
                     </div>
                   </>
                 )}

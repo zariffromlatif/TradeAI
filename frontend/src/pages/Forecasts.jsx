@@ -10,8 +10,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { LineChart as LineChartIcon, Activity } from "lucide-react";
+import { API_BASE_URL } from "../config/api";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 function Forecasts() {
   const [commodities, setCommodities] = useState([]);

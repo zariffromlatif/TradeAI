@@ -25,6 +25,16 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireRole(...roles) {
+  return (req, res, next) => {
+    const role = req.auth?.role;
+    if (!role || !roles.includes(role)) {
+      return res.status(403).json({ message: `Required role: ${roles.join(" or ")}` });
+    }
+    next();
+  };
+}
+
 /** Optional: attach full user document when you need tier, etc. */
 async function attachUser(req, res, next) {
   try {
@@ -36,4 +46,4 @@ async function attachUser(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireAdmin, attachUser };
+module.exports = { requireAuth, requireAdmin, requireRole, attachUser };

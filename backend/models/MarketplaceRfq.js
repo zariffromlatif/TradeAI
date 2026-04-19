@@ -1,5 +1,25 @@
 const mongoose = require("mongoose");
 
+const STATE = [
+  "draft",
+  "open",
+  "bidding",
+  "selection",
+  "completed",
+  "cancelled",
+];
+
+const StateHistorySchema = new mongoose.Schema(
+  {
+    from: { type: String, enum: STATE, required: true },
+    to: { type: String, enum: STATE, required: true },
+    by: { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    reason: { type: String, default: "" },
+    at: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const MarketplaceRfqSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -28,16 +48,21 @@ const MarketplaceRfqSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
-    status: {
-      type: String,
-      enum: ["open", "quoted", "awarded", "closed", "cancelled"],
-      default: "open",
+
+    state: { type: String, enum: STATE, default: "draft" },
+    biddingWindow: {
+      startsAt: { type: Date, default: null },
+      endsAt: { type: Date, default: null },
     },
+    selectedQuoteId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MarketplaceQuote",
+      default: null,
+    },
+    completedAt: { type: Date, default: null },
+    stateHistory: { type: [StateHistorySchema], default: [] },
   },
   { timestamps: true },
 );
-
-MarketplaceRfqSchema.index({ status: 1, createdAt: -1 });
-MarketplaceRfqSchema.index({ commodity: 1, status: 1, createdAt: -1 });
 
 module.exports = mongoose.model("MarketplaceRfq", MarketplaceRfqSchema);

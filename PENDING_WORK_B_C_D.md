@@ -1,6 +1,6 @@
 # TradeAI — Pending work guidelines (Members B, C & D)
 
-This document tracks what is **done** vs **remaining** for the frontend, ML, and operations tracks. Last updated: **F14** advisory (Express rules + `/advisory` UI).
+This document tracks what is **done** vs **remaining** for the frontend, ML, and operations tracks. Last updated: **JWT marketplace authz + dashboard fallback + data-health endpoint**.
 
 ---
 
@@ -8,9 +8,9 @@ This document tracks what is **done** vs **remaining** for the frontend, ML, and
 
 | Area | Done | Still open |
 |------|------|------------|
-| **Member B** | F1, F2, F4, F16 | Optional polish only |
-| **Member C** | F8; F9; F7; **F14** | — |
-| **Member D** | F10 UI; F5 Stripe + docs + demo payment; F11; F13; **F15 PDF** | — |
+| **Member B** | F1, F2, F4, F16, dashboard empty-state/fallback UX | Optional polish only |
+| **Member C** | F8; F9; F7 (**real FX**); **F14** | — |
+| **Member D** | F10 marketplace RFQ + deals + role/ownership authz; F5 Stripe + docs + demo payment; F11; F13; **F15 PDF** | — |
 
 ---
 
@@ -44,7 +44,7 @@ This document tracks what is **done** vs **remaining** for the frontend, ML, and
 | **F8** | `ml-service/main.py` — `POST /api/risk-score`; Express: `GET /api/analytics/risk/:country`, `POST /api/analytics/risk-score` |
 | **F9 (ML + API)** | `POST /api/risk/{code}/breakdown` in ML; `POST /api/analytics/risk/:country/breakdown` in Express |
 | **Batch risk (for compare / tools)** | `POST /api/analytics/risk-score/batch` proxies to ML |
-| **F7** | `POST /api/forecast/trade-volume`, `POST /api/forecast/price-volatility` in ML; Express `POST /api/analytics/forecast/volume`, `.../price-volatility`; `services/forecastData.js`; UI `Forecasts.jsx` `/forecasts` |
+| **F7** | `POST /api/forecast/trade-volume`, `POST /api/forecast/price-volatility` in ML; Express `POST /api/analytics/forecast/volume`, `.../price-volatility`, `GET /api/analytics/fx/pairs`; FX sync script `backend/scripts/syncFxRates.js`; UI `Forecasts.jsx` `/forecasts` |
 | **F14** | `POST /api/advisory/recommend`; `services/advisoryRules.js`; `routes/advisory.js`; UI `Advisory.jsx` `/advisory` (Express-only rules; ML for risk score) |
 
 ### Pending (Member C)
@@ -64,7 +64,7 @@ This document tracks what is **done** vs **remaining** for the frontend, ML, and
 
 | Item | Notes |
 |------|-------|
-| **F10** | `Orders.jsx` + `/orders`; create/list/status; anomaly column |
+| **F10** | `Orders.jsx` + `/orders`; RFQ board, quote submission, quote acceptance, deal settlement states, anomaly visibility |
 | **F5** | Stripe + webhook + `DEMO_PAYMENT` demo upgrade; README: Stripe vs SSLCommerz |
 | **F11 / F13** | `simulation.js`, `/sim`, `POST /api/sim/profitability`, `POST /api/sim/landed-cost` |
 | **F15** | `GET /api/reports/trade-summary` (pdfkit); dashboard **Download PDF report** |
@@ -80,6 +80,8 @@ This document tracks what is **done** vs **remaining** for the frontend, ML, and
 | Topic | Note |
 |-------|------|
 | ML service | Risk and batch endpoints need **`ml-service` on port 8000** or analytics proxies return 500. |
+| Marketplace verification | Run `node backend/scripts/verifyMarketplaceFlow.js` and `node backend/scripts/verifyMarketplaceGuards.js` after backend restart. |
+| Data freshness | `GET /api/analytics/data-health` exposes freshness of trade/commodity/FX sync pipelines. |
 | Compare page | Uses **`/api/analytics/compare`** — ensure backend deployed branch includes the `compare` route (see `analytics.js`). |
 | Anomalies | Bell + Alerts depend on **`GET /api/orders/anomalies`** and seeded/trade data. |
 

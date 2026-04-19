@@ -1,0 +1,79 @@
+name: TradeAI CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+
+  backend-marketplace-verify:
+    runs-on: ubuntu-latest
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+      - name: Create CI env file
+        run: |
+          cat > .env <<'EOF'
+          MONGO_URI=mongodb://127.0.0.1:27017/tradeai_ci
+          JWT_SECRET=ci-secret-key
+          JWT_ACCESS_EXPIRES_IN=1d
+          JWT_REMEMBER_EXPIRES_IN=14d
+          ADMIN_INVITE_CODE=ci-admin-code
+          DEMO_PAYMENT=false
+          CORS_ORIGINS=http://localhost:5173
+          EOF
+        working-directory: backend
+      - name: Seed database
+        run: npm run seed
+        working-directory: backend
+      - name: Start backend server
+        run: npm run start > backend.log 2>&1 &
+        working-directory: backend
+      - name: Wait for backend health
+        run: |
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:5000/api/analytics/dashboard > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not start in time"
+          cat backend/backend.log || true
+          exit 1
+      - name: Verify marketplace flow
+        run: npm run verify:marketplace:flow
+        working-directory: backend
+      - name: Verify marketplace guards
+        run: npm run verify:marketplace:guards
+        working-directory: backend

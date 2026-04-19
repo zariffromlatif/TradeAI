@@ -1,61 +1,33 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { BarChart2, TrendingUp, GitCompare, Bell, Package, Shield, ClipboardList, Sparkles, Calculator, LineChart as LineChartIcon, Lightbulb } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
+import { API_BASE_URL } from "../config/api";
+import {
+  BarChart2, TrendingUp, GitCompare, Bell, Package, Shield,
+  ClipboardList, Sparkles, Calculator, LineChart as LineChartIcon,
+  Lightbulb, LogOut, User, ShieldCheck
+} from "lucide-react";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 function Navbar() {
   const location = useLocation();
+  const { user, logout } = useAuth();
   const [hasAnomalies, setHasAnomalies] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
 
   const links = [
     { to: "/dashboard", label: "Dashboard", icon: <BarChart2 size={16} /> },
-    {
-      to: "/commodities",
-      label: "Commodities",
-      icon: <TrendingUp size={16} />,
-    },
-    {
-      to: "/compare",
-      label: "Compare",
-      icon: <GitCompare size={16} />,
-    },
-    {
-      to: "/forecasts",
-      label: "Forecasts",
-      icon: <LineChartIcon size={16} />,
-    },
-    {
-      to: "/advisory",
-      label: "Advisory",
-      icon: <Lightbulb size={16} />,
-    },
-    {
-      to: "/sim",
-      label: "Simulate",
-      icon: <Calculator size={16} />,
-    },
-    {
-      to: "/orders",
-      label: "Marketplace",
-      icon: <Package size={16} />,
-    },
-    {
-      to: "/risk",
-      label: "Risk score",
-      icon: <Shield size={16} />,
-    },
-    {
-      to: "/risk/breakdown",
-      label: "Risk explain",
-      icon: <ClipboardList size={16} />,
-    },
-    {
-      to: "/premium",
-      label: "Premium",
-      icon: <Sparkles size={16} />,
-    },
+    { to: "/commodities", label: "Commodities", icon: <TrendingUp size={16} /> },
+    { to: "/compare", label: "Compare", icon: <GitCompare size={16} /> },
+    { to: "/forecasts", label: "Forecasts", icon: <LineChartIcon size={16} /> },
+    { to: "/advisory", label: "Advisory", icon: <Lightbulb size={16} /> },
+    { to: "/sim", label: "Simulate", icon: <Calculator size={16} /> },
+    { to: "/orders", label: "Marketplace", icon: <Package size={16} /> },
+    { to: "/risk", label: "Risk score", icon: <Shield size={16} /> },
+    { to: "/risk/breakdown", label: "Risk explain", icon: <ClipboardList size={16} /> },
+    { to: "/premium", label: "Premium", icon: <Sparkles size={16} /> },
   ];
 
   // Poll every 30 seconds to update anomaly indicator.
@@ -74,13 +46,23 @@ function Navbar() {
     return () => clearInterval(intervalId);
   }, []);
 
+  // Close menu on outside click
+  useEffect(() => {
+    if (!showUserMenu) return;
+    const handler = (e) => {
+      if (!e.target.closest(".nav-user-menu-wrap")) setShowUserMenu(false);
+    };
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [showUserMenu]);
+
   return (
     <nav className="sticky top-0 z-50 bg-[#0a0a0a]/95 backdrop-blur border-b border-[#202020] px-6 py-4 flex items-center justify-between relative">
       <div className="flex items-center gap-2">
         <span className="text-[#8ab4ff] font-semibold tracking-tight text-xl">TradeAI</span>
         <span className="text-neutral-500 text-sm">Global Trade Analytics</span>
       </div>
-      
+
       <div className="flex items-center gap-6">
         {links.map((link) => (
           <Link
@@ -99,7 +81,7 @@ function Navbar() {
 
         <div className="w-px h-5 bg-[#2a2a2a]" />
 
-        {/* Dedicated Alerts Page Link */}
+        {/* Alerts */}
         <Link
           to="/alerts"
           className={`relative p-2 transition-colors rounded-lg ${
@@ -116,6 +98,41 @@ function Navbar() {
             </span>
           )}
         </Link>
+
+        <div className="w-px h-5 bg-[#2a2a2a]" />
+
+        {/* User menu */}
+        <div className="nav-user-menu-wrap" style={{ position: "relative" }}>
+          <button
+            className="nav-user-btn"
+            onClick={() => setShowUserMenu(!showUserMenu)}
+          >
+            <div className="nav-user-avatar">
+              {user?.name?.charAt(0)?.toUpperCase() || "U"}
+            </div>
+            <span className="nav-user-name">{user?.name || "User"}</span>
+            {user?.role === "admin" && (
+              <span className="nav-role-badge">
+                <ShieldCheck size={12} />
+                Admin
+              </span>
+            )}
+          </button>
+
+          {showUserMenu && (
+            <div className="nav-user-dropdown">
+              <div className="nav-dropdown-header">
+                <p className="nav-dropdown-name">{user?.name}</p>
+                <p className="nav-dropdown-email">{user?.email}</p>
+              </div>
+              <div className="nav-dropdown-divider" />
+              <button className="nav-dropdown-item" onClick={logout}>
+                <LogOut size={16} />
+                Sign out
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </nav>
   );

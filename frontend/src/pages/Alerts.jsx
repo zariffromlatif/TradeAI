@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { AlertTriangle, ShieldAlert } from "lucide-react";
+import { API_BASE_URL } from "../config/api";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 function Alerts() {
   const [anomalies, setAnomalies] = useState([]);

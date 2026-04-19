@@ -20,8 +20,9 @@ A **checklist table** for all **16** spec items (Modules 1–4), with **Met / Pa
 | **Member B** | Visualizer        | Feature 2: Commodity Price Trend Charts     | ✅ Done |
 | **Member C** | Intelligence Lead | Feature 8: Automated Risk Scoring (FastAPI) | ✅ Done |
 | **Member C** | Intelligence Lead | Feature 9: Risk Interpretability Panel      | ✅ Done |
-| **Member C** | Intelligence Lead | Feature 7: Dual-factor forecasts (volume + price volatility proxy) | ✅ Done |
+| **Member C** | Intelligence Lead | Feature 7: Dual-factor forecasts (volume + real FX volatility) | ✅ Done |
 | **Member D** | Operations Lead   | Feature 10: Simulated Order Management      | ✅ Done |
+| **Member D** | Operations Lead   | RFQ Marketplace V1 (RFQ/quotes/deals)       | ✅ Done |
 | **Member D** | Operations Lead   | Feature 5: Payment API (Stripe)             | ✅ Done |
 | **Support**  | Reporting         | Feature 15: PDF trade summary               | ✅ Done |
 | **Member C** | Intelligence Lead | Feature 14: Rule-based advisory (Express)   | ✅ Done |
@@ -61,9 +62,21 @@ A **checklist table** for all **16** spec items (Modules 1–4), with **Met / Pa
 ## Forecasts (Feature 7)
 
 - **Dual factor:** (1) **Trade volume** — monthly totals from `TradeRecord.volume` (optional filters: commodity, country, import/export), forecast via lag-1 linear regression in the ML service (naive fallback if the series is short). (2) **FX volatility** — log-return volatility from real historical exchange-rate series stored in `FxRate.history`.
-- **Express:** `POST /api/analytics/forecast/volume` (body: `commodity`, optional `country`, `type`, `horizon`) and `POST /api/analytics/forecast/price-volatility` (body: `commodity`). Both **proxy to the ML service** on port **8000** — the ML layer must be running or these return errors.
+- **Express:** `POST /api/analytics/forecast/volume` (body: `commodity`, optional `country`, `type`, `horizon`) and `POST /api/analytics/forecast/price-volatility` (body: `fxPair`, optional fallback inputs). Both proxy to the ML service on port **8000**.
 - **ML:** `POST /api/forecast/trade-volume`, `POST /api/forecast/price-volatility` in `ml-service/main.py`.
 - **UI:** `frontend/src/pages/Forecasts.jsx`, route **`/forecasts`**.
+- **FX sync script:** `backend/scripts/syncFxRates.js` (run before first FX forecast to populate pairs).
+
+---
+
+## RFQ Marketplace (Feature 10 extension)
+
+- **Flow:** buyer creates RFQ -> sellers submit quotes -> RFQ owner buyer accepts one quote -> platform creates deal order.
+- **Settlement:** tracked off-platform via settlement states (`unpaid`, `partially_settled`, `settled`, `disputed`).
+- **Security model:** marketplace writes require JWT; identity is derived from `req.auth.sub` (no `x-user-id` fallback).
+- **Authorization:** buyer/seller role checks and ownership checks are enforced (RFQ owner/admin for state + accept, deal parties/admin for settlement).
+- **Backend:** `backend/routes/marketplace.js` with `MarketplaceRfq`, `MarketplaceQuote`, and extended `Order` model.
+- **Frontend:** `frontend/src/pages/Orders.jsx` now includes RFQ Board, quote actions, and My Deals tab.
 
 ---
 
@@ -119,7 +132,7 @@ TradeAI/
 │       │   ├── ComparativeAnalysis.jsx, Alerts.jsx, Orders.jsx
 │       │   ├── Premium.jsx, PaymentSuccess.jsx, PaymentCancel.jsx
 │       │   ├── Simulation.jsx      ← F11 / F13 calculators (/sim)
-│       │   ├── Forecasts.jsx       ← F7 volume + price volatility proxy (/forecasts)
+│       │   ├── Forecasts.jsx       ← F7 volume + real FX volatility (/forecasts)
 │       │   └── Advisory.jsx        ← F14 advisory (/advisory)
 │       └── components/
 │           ├── Navbar.jsx          ← Top navigation
@@ -163,7 +176,9 @@ Create `backend/.env` from `.env.example` and fill in real values:
 
 - `MONGO_URI` — Atlas connection string (include database name, e.g. `/tradeai`)
 - `JWT_SECRET` — long random string (required for register/login)
-- `JWT_EXPIRES_IN` — optional, default `7d`
+- `JWT_ACCESS_EXPIRES_IN` — access token lifetime (default `1d`)
+- `JWT_REMEMBER_EXPIRES_IN` — remember-me token lifetime (default `14d`)
+- `CORS_ORIGINS` — comma-separated allowed frontend origins (set explicitly for production)
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` — for Stripe Checkout + webhook tier upgrades (optional if using demo payment only)
 - `DEMO_PAYMENT` — set `true` only for local demo of `POST /api/payment/demo-upgrade` (see **Payments** above)
 
@@ -172,13 +187,13 @@ node server.js
 # → Server on port 5000
 ```
 
-**First user** to `POST /api/auth/register` gets `role: admin` (empty `users` collection). Use `Authorization: Bearer <token>` on **POST/PUT/DELETE** for `/api/countries`, `/api/commodities`, `/api/trade`.
+Use `Authorization: Bearer <token>` on protected routes. Registration supports `buyer` / `seller`; admin role requires valid `adminCode`.
 
 ### 3. ML Service setup
 
 ```bash
 cd ml-service
-pip install -r ml-service/requirements.txt
+pip install -r requirements.txt
 python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
 # → Uvicorn running on http://127.0.0.1:8000
 ```
@@ -191,6 +206,10 @@ npm install
 npm run dev
 # → http://localhost:5173
 ```
+
+Create `frontend/.env` from `frontend/.env.example`:
+
+- `VITE_API_BASE_URL=http://localhost:5000/api`
 
 ### 5. (Optional) Re-seed the database
 
@@ -213,13 +232,23 @@ Open **3 terminals simultaneously**:
 
 ---
 
+## CI deploy gate
+
+- Workflow: `.github/workflows/ci.yml`
+- Frontend gate: `npm run lint` + `npm run build`
+- Backend gate: starts MongoDB + backend, seeds data, runs:
+  - `node backend/scripts/verifyMarketplaceFlow.js`
+  - `node backend/scripts/verifyMarketplaceGuards.js`
+
+---
+
 ## API Reference
 
 ### Backend (port 5000)
 
 | Method | Endpoint | Description |
 | ------ | -------- | ----------- |
-| POST | `/api/auth/register` | Register (first user becomes `admin`) |
+| POST | `/api/auth/register` | Register (`buyer`/`seller`; `admin` via invite code) |
 | POST | `/api/auth/login` | Login → JWT |
 | GET | `/api/auth/me` | Current user (Bearer required) |
 | GET | `/api/countries` | All countries |
@@ -232,6 +261,7 @@ Open **3 terminals simultaneously**:
 | GET | `/api/trade/:id` | Single trade record |
 | POST/PUT/DELETE | `/api/trade`, `/api/trade/:id` | **Admin + Bearer** required |
 | GET | `/api/analytics/dashboard` | Top 5 exporters + importers |
+| GET | `/api/analytics/data-health` | Data freshness status for trade, commodity, and FX |
 | GET | `/api/analytics/trade-balance` | Monthly balance; query `country`, `region` |
 | GET | `/api/analytics/country/:code` | Per-country import/export; `?monthly=true` for series |
 | GET | `/api/analytics/risk/:country` | Risk score via ML bridge |
@@ -245,6 +275,12 @@ Open **3 terminals simultaneously**:
 | GET | `/api/orders` | All orders |
 | GET | `/api/orders/anomalies` | Orders flagged by anomaly logic |
 | GET/POST/PUT/DELETE | `/api/orders`, `/api/orders/:id` | Order management |
+| GET/POST | `/api/marketplace/rfqs` | Marketplace RFQ list/create |
+| GET/PATCH | `/api/marketplace/rfqs/:id`, `/api/marketplace/rfqs/:id/state` | RFQ detail/state transition |
+| GET/POST | `/api/marketplace/rfqs/:id/quotes` | Quote list/create for RFQ |
+| POST | `/api/marketplace/quotes/:id/accept` | Accept quote + create deal |
+| GET | `/api/marketplace/deals` | RFQ-derived deals |
+| PUT | `/api/marketplace/deals/:id/settlement` | Update settlement tracking |
 | POST | `/api/payment/create-session` | Stripe checkout session |
 | POST | `/api/payment/webhook` | Stripe webhook (raw body); upgrades tier on completed checkout |
 | POST | `/api/payment/demo-upgrade` | Demo premium upgrade if `DEMO_PAYMENT=true` |
@@ -263,7 +299,7 @@ Open **3 terminals simultaneously**:
 | POST   | `/api/risk-score/batch`      | Score up to 20 countries at once        |
 | POST   | `/api/risk/{code}/breakdown` | Full per-indicator breakdown (FR9)      |
 | POST   | `/api/forecast/trade-volume` | F7 volume forecast from value series (used by Express proxy) |
-| POST   | `/api/forecast/price-volatility` | F7 price-history volatility proxy |
+| POST   | `/api/forecast/price-volatility` | F7 volatility from FX/price historical returns |
 | GET    | `/docs`                      | Auto-generated API docs (Swagger UI)    |
 
 ---

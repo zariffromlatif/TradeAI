@@ -11,8 +11,9 @@ import {
 } from "recharts";
 import { Globe, TrendingUp, TrendingDown, Activity, FileDown } from "lucide-react";
 import StatCard from "../components/StatCard";
+import { API_BASE_URL } from "../config/api";
 
-const API = "http://localhost:5000/api";
+const API = API_BASE_URL;
 
 function Dashboard() {
   const [dashboard, setDashboard] = useState({
@@ -20,6 +21,8 @@ function Dashboard() {
     topImporters: [],
     countriesTracked: 0,
     tradeRecordCount: 0,
+    totalTradeRecordCount: 0,
+    fallbackMode: "verified_only",
   });
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -102,6 +105,11 @@ function Dashboard() {
       {pdfError && (
         <p className="text-sm text-red-300">{pdfError}</p>
       )}
+      {dashboard.fallbackMode === "all_records" && (
+        <p className="text-xs text-amber-300">
+          Verified records are currently unavailable; showing fallback aggregates from all records.
+        </p>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -127,7 +135,11 @@ function Dashboard() {
           icon={<Activity className="text-neutral-300" size={20} />}
           title="Verified Records"
           value={dashboard.tradeRecordCount || "0"}
-          subtitle="Official trade records loaded"
+          subtitle={
+            dashboard.fallbackMode === "all_records"
+              ? `Fallback source active (${dashboard.totalTradeRecordCount || 0} total records)`
+              : "Official trade records loaded"
+          }
         />
       </div>
 
@@ -136,65 +148,77 @@ function Dashboard() {
         {/* Top Exporters */}
         <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
           <h2 className="text-neutral-100 font-semibold mb-4">Top 5 Exporters</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={dashboard.topExporters}>
-              <XAxis
-                dataKey="country"
-                tick={{ fill: "#a3a3a3", fontSize: 12 }}
-              />
-              <YAxis tick={{ fill: "#a3a3a3", fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#111111",
-                  border: "1px solid #2a2a2a",
-                  color: "#f5f5f5",
-                }}
-                labelStyle={{ color: "#e5e5e5" }}
-                itemStyle={{ color: "#f5f5f5" }}
-                formatter={(v) => [
-                  `$${(v / 1000000).toFixed(2)}M`,
-                  "Export Value",
-                ]}
-              />
-              <Bar dataKey="totalExportValue" radius={[4, 4, 0, 0]}>
-                {dashboard.topExporters.map((_, i) => (
-                  <Cell key={i} fill="#8ab4ff" />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {dashboard.topExporters.length === 0 ? (
+            <p className="text-sm text-neutral-500 py-12 text-center">
+              No exporter data available for current dataset.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={dashboard.topExporters}>
+                <XAxis
+                  dataKey="country"
+                  tick={{ fill: "#a3a3a3", fontSize: 12 }}
+                />
+                <YAxis tick={{ fill: "#a3a3a3", fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#111111",
+                    border: "1px solid #2a2a2a",
+                    color: "#f5f5f5",
+                  }}
+                  labelStyle={{ color: "#e5e5e5" }}
+                  itemStyle={{ color: "#f5f5f5" }}
+                  formatter={(v) => [
+                    `$${(v / 1000000).toFixed(2)}M`,
+                    "Export Value",
+                  ]}
+                />
+                <Bar dataKey="totalExportValue" radius={[4, 4, 0, 0]}>
+                  {dashboard.topExporters.map((_, i) => (
+                    <Cell key={i} fill="#8ab4ff" />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         {/* Top Importers */}
         <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
           <h2 className="text-neutral-100 font-semibold mb-4">Top 5 Importers</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={dashboard.topImporters}>
-              <XAxis
-                dataKey="country"
-                tick={{ fill: "#a3a3a3", fontSize: 12 }}
-              />
-              <YAxis tick={{ fill: "#a3a3a3", fontSize: 12 }} />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#111111",
-                  border: "1px solid #2a2a2a",
-                  color: "#f5f5f5",
-                }}
-                labelStyle={{ color: "#e5e5e5" }}
-                itemStyle={{ color: "#f5f5f5" }}
-                formatter={(v) => [
-                  `$${(v / 1000000).toFixed(2)}M`,
-                  "Import Value",
-                ]}
-              />
-              <Bar dataKey="totalImportValue" radius={[4, 4, 0, 0]}>
-                {dashboard.topImporters.map((_, i) => (
-                  <Cell key={i} fill="#e5e5e5" />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          {dashboard.topImporters.length === 0 ? (
+            <p className="text-sm text-neutral-500 py-12 text-center">
+              No importer data available for current dataset.
+            </p>
+          ) : (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={dashboard.topImporters}>
+                <XAxis
+                  dataKey="country"
+                  tick={{ fill: "#a3a3a3", fontSize: 12 }}
+                />
+                <YAxis tick={{ fill: "#a3a3a3", fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "#111111",
+                    border: "1px solid #2a2a2a",
+                    color: "#f5f5f5",
+                  }}
+                  labelStyle={{ color: "#e5e5e5" }}
+                  itemStyle={{ color: "#f5f5f5" }}
+                  formatter={(v) => [
+                    `$${(v / 1000000).toFixed(2)}M`,
+                    "Import Value",
+                  ]}
+                />
+                <Bar dataKey="totalImportValue" radius={[4, 4, 0, 0]}>
+                  {dashboard.topImporters.map((_, i) => (
+                    <Cell key={i} fill="#e5e5e5" />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
       </div>
