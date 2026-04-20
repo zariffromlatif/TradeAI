@@ -36,7 +36,7 @@ async function impliedPriceStats(commodityId) {
 async function volumeStats(commodityId, countryId) {
   const rows = await TradeRecord.find({
     commodity: commodityId,
-    country: countryId,
+    reporter: countryId,
   })
     .select("volume")
     .limit(2000)

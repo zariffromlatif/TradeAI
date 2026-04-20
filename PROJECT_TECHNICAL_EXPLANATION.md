@@ -64,7 +64,7 @@ This document describes how the **TradeAI** repository is structured, how the th
 | `auth.js` | `POST /register`, `POST /login`, `GET /me` | `express-validator`, `bcryptjs`, JWT via `JWT_SECRET`; registration supports buyer/seller role and optional admin invite code. |
 | `countries.js` | Public `GET`; admin `POST`/`PUT`/`DELETE` with `requireAuth` + `requireAdmin` | Backed by `Country` model. |
 | `commodities.js` | Same pattern for commodities | Includes optional `priceHistory` arrays. |
-| `trade.js` | Public `GET` trade records; admin mutations | `TradeRecord` model; validates `import`/`export`, ISO dates, Mongo IDs. |
+| `trade.js` | Public `GET` trade records; admin mutations | `TradeRecord` model; validates `reporter`, `partner`, `import`/`export`, ISO dates, Mongo IDs. |
 | `analytics.js` | Dashboard, trade-balance, country analytics, risk proxies, forecasts, compare, FX pair discovery, data-health | Uses `axios` to `ML_BASE` (`127.0.0.1:8000`). Dashboard supports verified-data fallback; includes `/api/analytics/data-health` freshness endpoint. |
 | `marketplace.js` | RFQ and quote lifecycle APIs + authz rules | Enforces JWT identity (`req.auth.sub`), role checks (buyer/seller/admin), ownership checks (RFQ owner for state/accept), and party-scoped settlement updates. |
 | `orders.js` | `GET /`, `GET /:id`, `POST /`, `PUT /:id`, `DELETE /:id`, `GET /anomalies` | On create, calls `evaluateSimulatedOrder` to set `isAnomaly` / `anomalyReason`. |
@@ -81,7 +81,7 @@ This document describes how the **TradeAI** repository is structured, how the th
 | `Country.js` | `code` unique, `region`, `GDP`, `inflation`, `tradeBalance` (USD billions in seed/docs). |
 | `Commodity.js` | `name`, `category`, `unit`, `currentPrice`, embedded `priceHistory[]` `{ date, price }`. |
 | `FxRate.js` | FX pair store with `pair`, `baseCurrency`, `quoteCurrency`, `currentRate`, `history[]`, `asOf`, `source`, `verified`. |
-| `TradeRecord.js` | `country`, `commodity`, `type` (`import`/`export`), `volume`, `value`, `date`. |
+| `TradeRecord.js` | **Normalized bilateral flow:** `reporter`, `partner` (Country refs), `commodity`, `type` (import/export **from reporter’s perspective**), `volume`, `value`, `date`. |
 | `MarketplaceRfq.js` | RFQ metadata, route countries, quantity/unit/incoterm, state lifecycle (`draft/open/bidding/selection/completed/cancelled`). |
 | `MarketplaceQuote.js` | Quote records for each RFQ with offer price, lead time, validity, anomaly flags, and score breakdown fields. |
 | `Order.js` | Includes legacy/manual orders and RFQ deals with `source`, `rfqId`, `quoteId`, buyer/seller refs, `settlementStatus`, anomaly fields. |
@@ -91,7 +91,7 @@ This document describes how the **TradeAI** repository is structured, how the th
 | File | Responsibility |
 |------|----------------|
 | `dashboardStats.js` | `getDashboardAggregates()` — top 5 countries by export/import; verified-data-first with all-record fallback metadata. |
-| `forecastData.js` | `getMonthlyVolumeSeries({ commodityId, countryId, type })` — monthly sum of `volume` from `TradeRecord`. |
+| `forecastData.js` | `getMonthlyVolumeSeries({ commodityId, countryId, type })` — monthly sum of `volume` from `TradeRecord` where `reporter` = country when country is set. |
 | `advisoryRules.js` | `logReturnSampleStd(prices)`, `buildRecommendations(signals)` — threshold-based strings (risk band, deficit, inflation, volatility). |
 | `orderAnomaly.js` | `evaluateSimulatedOrder` — hard cap on quantity, deviation from `currentPrice`, implied unit-price stats from historical trade, volume percentile heuristics; returns human-readable reasons. |
 

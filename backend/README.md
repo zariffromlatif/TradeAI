@@ -218,7 +218,7 @@ Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
 | Script | Purpose |
 | ------ | ------- |
 | `node scripts/syncCommodityPrices.js` | Sync real commodity prices |
-| `node scripts/syncTradeFlows.js` | Sync real trade flow records |
+| `node scripts/syncTradeFlows.js` | Sync real national trade records (World Bank, free) |
 | `node scripts/syncFxRates.js` | Sync real FX historical series |
 | `node scripts/verifyMarketplaceFlow.js` | Verify RFQ→quote→deal lifecycle |
 | `node scripts/verifyMarketplaceGuards.js` | Verify RFQ state transitions + bid guard rules |
@@ -228,10 +228,11 @@ Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
 
 ## Notes
 
-- Use `backend/.env` for `MONGO_URI`, JWT, Stripe, and Comtrade settings.
+- Use `backend/.env` for `MONGO_URI`, JWT, Stripe, and trade sync settings.
 - Configure `CORS_ORIGINS` in production to allow only deployed frontend domains.
 - Forecast/risk endpoints that proxy ML require FastAPI running on `127.0.0.1:8000`.
 - Legacy `/api/orders` remains available; marketplace deals are stored with `Order.source = "rfq"`.
+- **TradeRecord schema:** uses `reporter` + `partner` (not `country`). After pulling this change, clear `traderecords` in Mongo or re-seed, then run `syncTradeFlows.js` so World Bank national totals (reporter-vs-world) match the new shape.
 
 ---
 

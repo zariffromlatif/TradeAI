@@ -43,7 +43,10 @@ function Forecasts() {
         setCommodities(c.data);
         setCountries(co.data);
         setFxPairs(fx.data || []);
-        if (c.data.length) setCommodity(c.data[0]._id);
+        if (c.data.length) {
+          const aggregate = c.data.find((x) => x.name === "All Commodities (HS TOTAL)");
+          setCommodity((aggregate || c.data[0])._id);
+        }
         if (fx.data?.length) setFxPair(fx.data[0].pair);
       })
       .catch((err) => {
@@ -115,7 +118,7 @@ function Forecasts() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Forecasts</h1>
           <p className="text-neutral-400 text-sm">
-            Trade volume projection from records; volatility from real{" "}
+            Volume forecast uses monthly totals from trade records (USD value when quantity is absent); FX volatility uses real{" "}
             <code className="text-[#8ab4ff]">FX historical rates</code>.
           </p>
         </div>
@@ -224,6 +227,12 @@ function Forecasts() {
             <code className="text-[#8ab4ff]">{volumeResult.method}</code>
             {volumeResult.note ? ` — ${volumeResult.note}` : ""}
           </p>
+          {volumeResult.sourceNote && (
+            <p className="text-neutral-500 text-xs mt-1">{volumeResult.sourceNote}</p>
+          )}
+          {volumeResult.expansionNote && (
+            <p className="text-neutral-500 text-xs mt-1">{volumeResult.expansionNote}</p>
+          )}
           {chartRows.length > 0 && (
             <div className="h-72 mt-4">
               <ResponsiveContainer width="100%" height="100%">
@@ -244,7 +253,7 @@ function Forecasts() {
                   <Line
                     type="monotone"
                     dataKey="volume"
-                    name="Volume (units / month)"
+                    name="Monthly total (USD value or units)"
                     stroke="#8ab4ff"
                     strokeWidth={2.25}
                     dot={{ r: 3 }}

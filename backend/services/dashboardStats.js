@@ -1,5 +1,7 @@
 const TradeRecord = require("../models/TradeRecord");
 const Country = require("../models/Country");
+const Commodity = require("../models/Commodity");
+const { getNationalPartnerMatch } = require("./nationalTradeSupport");
 
 /**
  * Same aggregates as GET /api/analytics/dashboard (for JSON + PDF reports).
@@ -7,16 +9,36 @@ const Country = require("../models/Country");
 async function getDashboardAggregates() {
   const realTradeMatch = {
     isVerified: true,
-    source: { $in: ["un_comtrade", "official_api"] },
+    source: { $in: ["un_comtrade", "official_api", "world_bank_api"] },
   };
   const verifiedCount = await TradeRecord.countDocuments(realTradeMatch);
-  const matchBase =
-    verifiedCount > 0 ? realTradeMatch : {};
 
+  const agg = await Commodity.findOne({ name: "All Commodities (HS TOTAL)" })
+    .select("_id")
+    .lean();
+  const nationalExtra = await getNationalPartnerMatch(agg?._id || null);
+
+  let matchBase = {};
+  if (verifiedCount > 0) {
+    matchBase = {
+      ...realTradeMatch,
+      ...(agg ? { commodity: agg._id } : {}),
+    };
+    if (Object.keys(nationalExtra).length) {
+      matchBase = { ...matchBase, ...nationalExtra };
+    }
+  }
+
+  // Secondary sort by _id so ties are deterministic (MongoDB order is undefined when totals match).
   const exportStats = await TradeRecord.aggregate([
     { $match: { ...matchBase, type: "export" } },
-    { $group: { _id: "$country", totalExportValue: { $sum: "$value" } } },
-    { $sort: { totalExportValue: -1 } },
+    {
+      $group: {
+        _id: "$reporter",
+        totalExportValue: { $sum: { $ifNull: ["$value", 0] } },
+      },
+    },
+    { $sort: { totalExportValue: -1, _id: 1 } },
     { $limit: 5 },
     {
       $lookup: {
@@ -32,8 +54,13 @@ async function getDashboardAggregates() {
 
   const importStats = await TradeRecord.aggregate([
     { $match: { ...matchBase, type: "import" } },
-    { $group: { _id: "$country", totalImportValue: { $sum: "$value" } } },
-    { $sort: { totalImportValue: -1 } },
+    {
+      $group: {
+        _id: "$reporter",
+        totalImportValue: { $sum: { $ifNull: ["$value", 0] } },
+      },
+    },
+    { $sort: { totalImportValue: -1, _id: 1 } },
     { $limit: 5 },
     {
       $lookup: {

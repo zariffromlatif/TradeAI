@@ -61,13 +61,17 @@ async function seed() {
     const types = ["import", "export"];
     const tradeRecords = [];
 
-    for (const country of savedCountries) {
+    const n = savedCountries.length;
+    for (let i = 0; i < n; i += 1) {
+      const reporter = savedCountries[i];
+      const partner = savedCountries[(i + 1) % n];
       for (const commodity of savedCommodities) {
         for (let m = 0; m < 6; m++) {
           const date = new Date();
           date.setMonth(date.getMonth() - m);
           tradeRecords.push({
-            country: country._id,
+            reporter: reporter._id,
+            partner: partner._id,
             commodity: commodity._id,
             type: types[Math.floor(Math.random() * 2)],
             volume: Math.floor(Math.random() * 10000) + 1000,

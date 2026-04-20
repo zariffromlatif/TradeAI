@@ -445,11 +445,13 @@ export default function RiskScorePanel() {
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "#111111",
+                        backgroundColor: "#111111",
                         border: "1px solid #2a2a2a",
                         borderRadius: 8,
+                        color: "#f5f5f5",
                       }}
-                      labelStyle={{ color: "#f5f5f5" }}
+                      labelStyle={{ color: "#e5e5e5", fontWeight: 600 }}
+                      itemStyle={{ color: "#f5f5f5" }}
                     />
                     <Bar dataKey="score" radius={[0, 6, 6, 0]}>
                       {radarData.map((entry, index) => {

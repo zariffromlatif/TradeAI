@@ -14,7 +14,8 @@ function handleValidation(req, res, next) {
 router.get("/", async (req, res) => {
   try {
     const records = await TradeRecord.find()
-      .populate("country", "name code")
+      .populate("reporter", "name code")
+      .populate("partner", "name code")
       .populate("commodity", "name category");
     res.json(records);
   } catch (err) {
@@ -26,7 +27,8 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const record = await TradeRecord.findById(req.params.id)
-      .populate("country", "name code")
+      .populate("reporter", "name code")
+      .populate("partner", "name code")
       .populate("commodity", "name category");
     if (!record)
       return res.status(404).json({ message: "Trade record not found" });
@@ -42,7 +44,8 @@ router.post(
   requireAuth,
   requireAdmin,
   [
-    body("country").isMongoId().withMessage("country must be a valid MongoDB id"),
+    body("reporter").isMongoId().withMessage("reporter must be a valid MongoDB id"),
+    body("partner").isMongoId().withMessage("partner must be a valid MongoDB id"),
     body("commodity").isMongoId().withMessage("commodity must be a valid MongoDB id"),
     body("type").isIn(["import", "export"]),
     body("volume").optional().isFloat({ gt: 0 }),
@@ -68,7 +71,8 @@ router.put(
   requireAdmin,
   [
     param("id").isMongoId(),
-    body("country").optional().isMongoId(),
+    body("reporter").optional().isMongoId(),
+    body("partner").optional().isMongoId(),
     body("commodity").optional().isMongoId(),
     body("type").optional().isIn(["import", "export"]),
     body("volume").optional().isFloat({ gt: 0 }),

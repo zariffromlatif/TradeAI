@@ -135,10 +135,20 @@ function ComparativeAnalysis() {
 
       {/* Visualization */}
       <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
-        <h2 className="text-neutral-100 font-semibold mb-6">
+        <h2 className="text-neutral-100 font-semibold mb-3">
           {/* NEW: Dynamic Chart Title based on selected product */}
           {meta ? `${meta.countryA.name} vs ${meta.countryB.name} — ${tradeType === 'export' ? 'Export' : 'Import'} Volume (${getCommodityLabel()})` : 'Loading Comparison...'}
         </h2>
+        {meta?.usesNationalTotals && (
+          <p className="text-neutral-500 text-xs mb-4">
+            Values are official national totals (reporter vs world) from synced data — not sums of bilateral partner flows.
+          </p>
+        )}
+        {meta && meta.usesNationalTotals === false && (
+          <p className="text-neutral-500 text-xs mb-4">
+            Using bilateral trade rows only. Run <code className="text-[#8ab4ff]">syncTradeFlows</code> after upgrading so national (World) totals are stored — compare will prefer those automatically.
+          </p>
+        )}
 
         {loading ? (
           <p className="text-neutral-400 text-center py-16">Crunching comparison data...</p>

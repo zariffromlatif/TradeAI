@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const TradeRecord = require("../models/TradeRecord");
 const Country = require("../models/Country");
 const axios = require("axios");
@@ -7,20 +8,38 @@ const PartnerProfile = require("../models/PartnerProfile");
 const { getDashboardAggregates } = require("../services/dashboardStats");
 const Commodity = require("../models/Commodity");
 const FxRate = require("../models/FxRate");
-const { getMonthlyVolumeSeries } = require("../services/forecastData");
+const {
+  getMonthlyVolumeSeries,
+  prepareVolumeSeriesForMl,
+} = require("../services/forecastData");
+const { getNationalPartnerMatch } = require("../services/nationalTradeSupport");
 
 const ML_BASE = "http://127.0.0.1:8000";
 const REAL_TRADE_MATCH = {
   isVerified: true,
-  source: { $in: ["un_comtrade", "official_api"] },
+  source: { $in: ["un_comtrade", "official_api", "world_bank_api"] },
 };
 
 // GET /api/analytics/dashboard
 router.get("/dashboard", async (req, res) => {
   try {
-    const { topExporters, topImporters, countriesTracked, tradeRecordCount } =
-      await getDashboardAggregates();
-    res.json({ topExporters, topImporters, countriesTracked, tradeRecordCount });
+    const payload = await getDashboardAggregates();
+    const {
+      topExporters,
+      topImporters,
+      countriesTracked,
+      tradeRecordCount,
+      totalTradeRecordCount,
+      fallbackMode,
+    } = payload;
+    res.json({
+      topExporters,
+      topImporters,
+      countriesTracked,
+      tradeRecordCount,
+      totalTradeRecordCount,
+      fallbackMode,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -70,7 +89,7 @@ router.get("/trade-balance", async (req, res) => {
       {
         $lookup: {
           from: "countries",
-          localField: "country",
+          localField: "reporter",
           foreignField: "_id",
           as: "countryInfo"
         }
@@ -78,7 +97,7 @@ router.get("/trade-balance", async (req, res) => {
       { $unwind: "$countryInfo" }
     ];
 
-    // Optional filters
+    // Optional filters (reporter = country whose trade is measured)
     const matchStage = {};
     if (country) {
       matchStage["countryInfo.code"] = country.toUpperCase();
@@ -162,7 +181,7 @@ router.get("/country/:code", async (req, res) => {
 
     if (!monthly) {
       const byType = await TradeRecord.aggregate([
-        { $match: { ...REAL_TRADE_MATCH, country: country._id } },
+        { $match: { ...REAL_TRADE_MATCH, reporter: country._id } },
         {
           $group: {
             _id: "$type",
@@ -204,7 +223,7 @@ router.get("/country/:code", async (req, res) => {
     }
 
     const series = await TradeRecord.aggregate([
-      { $match: { ...REAL_TRADE_MATCH, country: country._id } },
+      { $match: { ...REAL_TRADE_MATCH, reporter: country._id } },
       {
         $group: {
           _id: {
@@ -305,21 +324,52 @@ router.post("/forecast/volume", async (req, res) => {
     if (!commodity) {
       return res.status(400).json({ message: "commodity (ObjectId) is required" });
     }
-    const series = await getMonthlyVolumeSeries({
+    let usedCommodityId = commodity;
+    let rawSeries = await getMonthlyVolumeSeries({
       commodityId: commodity,
       countryId: country || null,
       type,
     });
-    if (!series.length) {
+    let sourceNote = undefined;
+    if (!rawSeries.length) {
+      const aggregate = await Commodity.findOne({ name: "All Commodities (HS TOTAL)" })
+        .select("_id name")
+        .lean();
+      if (aggregate && String(aggregate._id) !== String(commodity)) {
+        const fallbackSeries = await getMonthlyVolumeSeries({
+          commodityId: aggregate._id,
+          countryId: country || null,
+          type,
+        });
+        if (fallbackSeries.length) {
+          rawSeries = fallbackSeries;
+          usedCommodityId = String(aggregate._id);
+          sourceNote =
+            "No rows found for selected commodity; using All Commodities (HS TOTAL) national series.";
+        }
+      }
+    }
+    if (!rawSeries.length) {
       return res.status(400).json({ message: "No trade rows for this filter" });
     }
-    const values = series.map((s) => s.totalVolume);
+    const { seriesForMl, expanded } = prepareVolumeSeriesForMl(rawSeries);
+    const values = seriesForMl.map((s) => s.totalVolume);
     const h = Math.min(12, Math.max(1, Number(horizon) || 1));
     const response = await axios.post(`${ML_BASE}/api/forecast/trade-volume`, {
       values,
       horizon: h,
     });
-    res.json({ ...response.data, series });
+    const expansionNote = expanded
+      ? "Annual observations were split evenly across 12 months so the forecast model has enough points; totals per year are preserved."
+      : undefined;
+    res.json({
+      ...response.data,
+      series: expanded ? seriesForMl : rawSeries,
+      rawSeries,
+      expansionNote,
+      sourceNote,
+      usedCommodityId,
+    });
   } catch (err) {
     const msg =
       err.response?.data?.detail ||
@@ -440,6 +490,11 @@ router.get("/compare", async (req, res) => {
       return res.status(400).json({ message: "Please provide both countryA and countryB codes." });
     }
 
+    const flowType = String(type || "export").toLowerCase();
+    if (flowType !== "import" && flowType !== "export") {
+      return res.status(400).json({ message: "type must be import or export." });
+    }
+
     const cA = await Country.findOne({ code: countryA.toUpperCase() });
     const cB = await Country.findOne({ code: countryB.toUpperCase() });
 
@@ -447,67 +502,86 @@ router.get("/compare", async (req, res) => {
       return res.status(404).json({ message: "One or both countries not found in the database." });
     }
 
-    // Set up our base match criteria
-    const matchStage = {
-      country: { $in: [cA._id, cB._id] },
-      type: type,
-      ...REAL_TRADE_MATCH,
-    };
-
-    // If a specific commodity was selected, add it to the filter
-    if (commodity && commodity !== "all") {
-      const mongoose = require("mongoose");
-      matchStage.commodity = new mongoose.Types.ObjectId(commodity);
+    if (cA._id.equals(cB._id)) {
+      return res.status(400).json({ message: "Select two different countries to compare." });
     }
 
-    // Aggregation pipeline
-    const pipeline = [
-      { $match: matchStage },
+    const aggRow = await Commodity.findOne({ name: "All Commodities (HS TOTAL)" })
+      .select("_id")
+      .lean();
+    let commodityOid = null;
+    if (commodity && commodity !== "all") {
+      commodityOid = new mongoose.Types.ObjectId(commodity);
+    } else if (aggRow?._id) {
+      commodityOid = aggRow._id;
+    }
+
+    const nationalExtra = await getNationalPartnerMatch(commodityOid);
+
+    // National totals per reporter — two separate pipelines so reporter A/B cannot
+    // be merged incorrectly (avoids duplicate identical series in the UI).
+    const buildMatch = (reporterId) => {
+      const m = {
+        reporter: reporterId,
+        type: flowType,
+        ...REAL_TRADE_MATCH,
+        ...nationalExtra,
+      };
+      if (commodityOid) {
+        m.commodity = commodityOid;
+      }
+      return m;
+    };
+
+    const monthlyPipeline = (reporterId) => [
+      { $match: buildMatch(reporterId) },
       {
         $group: {
           _id: {
             year: { $year: "$date" },
             month: { $month: "$date" },
-            country: "$country",
           },
-          totalValue: { $sum: "$value" },
-        },
-      },
-      {
-        $group: {
-          _id: { year: "$_id.year", month: "$_id.month" },
-          records: {
-            $push: {
-              countryId: "$_id.country",
-              value: "$totalValue",
-            },
-          },
+          totalValue: { $sum: { $ifNull: ["$value", 0] } },
         },
       },
       { $sort: { "_id.year": 1, "_id.month": 1 } },
     ];
 
-    const results = await TradeRecord.aggregate(pipeline);
+    const [seriesA, seriesB] = await Promise.all([
+      TradeRecord.aggregate(monthlyPipeline(cA._id)),
+      TradeRecord.aggregate(monthlyPipeline(cB._id)),
+    ]);
 
-    // Format the payload for Recharts
-    const formattedData = results.map((row) => {
+    const byDate = new Map();
+
+    const ensureRow = (dateStr) => {
+      let row = byDate.get(dateStr);
+      if (!row) {
+        row = { date: dateStr, [cA.code]: 0, [cB.code]: 0 };
+        byDate.set(dateStr, row);
+      }
+      return row;
+    };
+
+    for (const row of seriesA) {
       const dateStr = `${row._id.year}-${String(row._id.month).padStart(2, "0")}`;
-      const dataPoint = { date: dateStr };
+      ensureRow(dateStr)[cA.code] = Number(row.totalValue) || 0;
+    }
+    for (const row of seriesB) {
+      const dateStr = `${row._id.year}-${String(row._id.month).padStart(2, "0")}`;
+      ensureRow(dateStr)[cB.code] = Number(row.totalValue) || 0;
+    }
 
-      const aRecord = row.records.find((r) => r.countryId.toString() === cA._id.toString());
-      const bRecord = row.records.find((r) => r.countryId.toString() === cB._id.toString());
-
-      dataPoint[cA.code] = aRecord ? aRecord.value : 0;
-      dataPoint[cB.code] = bRecord ? bRecord.value : 0;
-
-      return dataPoint;
-    });
+    const formattedData = Array.from(byDate.keys())
+      .sort()
+      .map((k) => byDate.get(k));
 
     res.json({
       meta: {
         countryA: { code: cA.code, name: cA.name },
         countryB: { code: cB.code, name: cB.name },
-        type: type,
+        type: flowType,
+        usesNationalTotals: Object.keys(nationalExtra).length > 0,
       },
       data: formattedData,
     });

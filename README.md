@@ -108,7 +108,7 @@ TradeAI/
 │   ├── models/
 │   │   ├── Country.js              ← GDP, inflation, trade balance
 │   │   ├── Commodity.js            ← price history array
-│   │   ├── TradeRecord.js          ← import/export records
+│   │   ├── TradeRecord.js          ← bilateral trade (reporter + partner)
 │   │   ├── Order.js                ← simulated trade orders (Member D)
 │   │   └── User.js                 ← tier + role (admin/user)
 │   └── routes/
@@ -152,7 +152,7 @@ TradeAI/
 ### Prerequisites
 
 - Node.js v18+
-- Python 3.10+
+- Python 3.12
 - MongoDB Atlas account (`MONGO_URI`)
 - Stripe account (optional for demo-only: use `DEMO_PAYMENT=true` instead) — `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` for real Checkout + webhooks
 
@@ -239,6 +239,24 @@ Open **3 terminals simultaneously**:
 - Backend gate: starts MongoDB + backend, seeds data, runs:
   - `node backend/scripts/verifyMarketplaceFlow.js`
   - `node backend/scripts/verifyMarketplaceGuards.js`
+
+---
+
+## Trade records (normalized model)
+
+`TradeRecord` rows are normalized bilateral/national flows:
+
+| Field | Meaning |
+| --- | --- |
+| `reporter` | Country declaring the flow |
+| `partner` | Counterparty country |
+| `type` | `export` = reporter exports **to** partner; `import` = reporter imports **from** partner |
+
+Dashboard top exporters/importers and country analytics aggregate by **`reporter`**. **Compare** charts national totals per selected country (sum over all partners for that reporter).
+
+**Upgrading from older data:** remove legacy trade documents, then run `node backend/scripts/syncTradeFlows.js` and/or `node backend/seed.js`.
+
+**Deployment / real charts:** configure `TRADE_SYNC_COUNTRY_CODES` and run `node backend/scripts/syncTradeFlows.js`. The script ingests free World Bank annual imports/exports (USD) as reporter-vs-world records so Compare and Forecast have stable non-zero series.
 
 ---
 
