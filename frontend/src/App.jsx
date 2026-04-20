@@ -18,42 +18,40 @@ import Simulation from "./pages/Simulation";
 import Forecasts from "./pages/Forecasts";
 import Advisory from "./pages/Advisory";
 
+// Extract the layout so we can reuse it for both Public and Private routes
+const MainLayout = ({ children }) => (
+  <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
+    <Navbar />
+    <main className="mx-auto w-full max-w-[1400px] px-6 py-6">
+      {children}
+    </main>
+  </div>
+);
+
 function AppRoutes() {
   return (
     <Routes>
-      {/* Public routes — no navbar */}
+      {/* Auth routes — entirely separate, no navbar */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
 
-      {/* Protected routes — with navbar */}
-      <Route
-        path="/*"
-        element={
-          <ProtectedRoute>
-            <div className="min-h-screen bg-[#0a0a0a] text-neutral-100">
-              <Navbar />
-              <main className="mx-auto w-full max-w-[1400px] px-6 py-6">
-                <Routes>
-                  <Route path="/" element={<Navigate to="/dashboard" />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/commodities" element={<CommodityTrends />} />
-                  <Route path="/compare" element={<ComparativeAnalysis />} />
-                  <Route path="/alerts" element={<Alerts />} />
-                  <Route path="/orders" element={<Orders />} />
-                  <Route path="/risk" element={<RiskScorePanel />} />
-                  <Route path="/risk/breakdown" element={<RiskBreakdownPanel />} />
-                  <Route path="/payment/success" element={<PaymentSuccess />} />
-                  <Route path="/payment/cancel" element={<PaymentCancel />} />
-                  <Route path="/premium" element={<Premium />} />
-                  <Route path="/sim" element={<Simulation />} />
-                  <Route path="/forecasts" element={<Forecasts />} />
-                  <Route path="/advisory" element={<Advisory />} />
-                </Routes>
-              </main>
-            </div>
-          </ProtectedRoute>
-        }
-      />
+      {/* PUBLIC ROUTES — Has Navbar, NO ProtectedRoute */}
+      <Route path="/" element={<Navigate to="/dashboard" />} />
+      <Route path="/dashboard" element={<MainLayout><Dashboard /></MainLayout>} />
+      <Route path="/commodities" element={<MainLayout><CommodityTrends /></MainLayout>} />
+
+      {/* PRIVATE ROUTES — Has Navbar AND is wrapped in ProtectedRoute */}
+      <Route path="/compare" element={<ProtectedRoute><MainLayout><ComparativeAnalysis /></MainLayout></ProtectedRoute>} />
+      <Route path="/alerts" element={<ProtectedRoute><MainLayout><Alerts /></MainLayout></ProtectedRoute>} />
+      <Route path="/orders" element={<ProtectedRoute><MainLayout><Orders /></MainLayout></ProtectedRoute>} />
+      <Route path="/risk" element={<ProtectedRoute><MainLayout><RiskScorePanel /></MainLayout></ProtectedRoute>} />
+      <Route path="/risk/breakdown" element={<ProtectedRoute><MainLayout><RiskBreakdownPanel /></MainLayout></ProtectedRoute>} />
+      <Route path="/sim" element={<ProtectedRoute><MainLayout><Simulation /></MainLayout></ProtectedRoute>} />
+      <Route path="/forecasts" element={<ProtectedRoute><MainLayout><Forecasts /></MainLayout></ProtectedRoute>} />
+      <Route path="/advisory" element={<ProtectedRoute><MainLayout><Advisory /></MainLayout></ProtectedRoute>} />
+      <Route path="/premium" element={<ProtectedRoute><MainLayout><Premium /></MainLayout></ProtectedRoute>} />
+      <Route path="/payment/success" element={<ProtectedRoute><MainLayout><PaymentSuccess /></MainLayout></ProtectedRoute>} />
+      <Route path="/payment/cancel" element={<ProtectedRoute><MainLayout><PaymentCancel /></MainLayout></ProtectedRoute>} />
     </Routes>
   );
 }

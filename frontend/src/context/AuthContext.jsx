@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom"; // <-- 1. Import useNavigate
 import { API_BASE_URL } from "../config/api";
 
 const AuthContext = createContext(null);
@@ -14,6 +15,8 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem("tradeai_token"));
   const [loading, setLoading] = useState(true);
+  
+  const navigate = useNavigate(); // <-- 2. Initialize the hook
 
   const isAuthenticated = !!user && !!token;
 
@@ -72,10 +75,16 @@ export function AuthProvider({ children }) {
     return userData;
   };
 
-  const logout = () => {
-    localStorage.removeItem("tradeai_token");
-    setToken(null);
-    setUser(null);
+const logout = () => {
+    // 1. Route to the public dashboard FIRST
+    navigate("/dashboard", { replace: true });
+    
+    // 2. Wipe the session data a split-second later so ProtectedRoute doesn't panic
+    setTimeout(() => {
+      localStorage.removeItem("tradeai_token");
+      setToken(null);
+      setUser(null);
+    }, 50); 
   };
 
   return (

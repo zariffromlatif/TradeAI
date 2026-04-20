@@ -344,7 +344,7 @@ function Orders() {
             type="button"
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`btn-ui ${activeTab === tab.id ? "btn-primary" : "btn-secondary"} !h-9`}
+            className={`btn-ui ${activeTab === tab.id ? "btn-primary" : "btn-secondary"} `}
           >
             {tab.icon}
             {tab.label}
