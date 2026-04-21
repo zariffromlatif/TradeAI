@@ -72,6 +72,8 @@ class RiskScoreRequest(BaseModel):
 class VolumeForecastRequest(BaseModel):
     values: list[float] = Field(..., min_length=1)
     horizon: int = Field(1, ge=1, le=12)
+    source_frequency: Optional[str] = Field("monthly")
+    exogenous: Optional[dict] = None
 
 
 class PriceVolatilityRequest(BaseModel):
@@ -292,37 +294,164 @@ async def risk_breakdown(country_code: str, payload: RiskScoreRequest):
 
 @app.post("/api/forecast/trade-volume")
 async def forecast_trade_volume(body: VolumeForecastRequest):
-    """F7 — lag-1 linear regression on monthly total volumes; naive fallback if short series."""
+    """
+    Upgraded F7:
+    - Feature-based autoregression (lags + rolling averages + optional exogenous factors)
+    - Forecast intervals (80% and 95%)
+    - Rolling backtest metrics (MAE, RMSE)
+    """
     v = [float(x) for x in body.values if x is not None and np.isfinite(float(x))]
     if len(v) < 1:
         raise HTTPException(status_code=400, detail="No valid volume values")
-    h = body.horizon
-    if len(v) < 4:
+
+    h = int(body.horizon)
+    ex = body.exogenous or {}
+    fx_trend = float(ex.get("fx_trend", 0.0) or 0.0)
+    commodity_trend = float(ex.get("commodity_trend", 0.0) or 0.0)
+    oil_index = float(ex.get("oil_index", 0.0) or 0.0)
+
+    def build_row(series, idx):
+        # idx references the target point in series (predict series[idx])
+        t1 = float(series[idx - 1])
+        t3 = float(series[idx - 3])
+        t6 = float(series[idx - 6])
+        win3 = float(np.mean(series[idx - 3:idx]))
+        win6 = float(np.mean(series[idx - 6:idx]))
+        return [t1, t3, t6, win3, win6, fx_trend, commodity_trend, oil_index]
+
+    # Need at least 7 points to build t-6 lag features.
+    if len(v) < 7:
         last = max(0.0, v[-1])
         fc = [{"step": i + 1, "value": round(last, 2)} for i in range(h)]
+        intervals = [
+            {
+                "step": i + 1,
+                "lower80": round(max(0.0, last * 0.9), 2),
+                "upper80": round(last * 1.1, 2),
+                "lower95": round(max(0.0, last * 0.8), 2),
+                "upper95": round(last * 1.2, 2),
+            }
+            for i in range(h)
+        ]
         return {
-            "method": "naive_last",
+            "method": "naive_last_with_bands",
             "historical_values": v,
             "forecast": fc,
-            "note": "Series too short for regression; repeated last observation.",
+            "intervals": intervals,
+            "metrics": {"mae": None, "rmse": None, "backtest_points": 0},
+            "feature_names": ["lag_t1", "lag_t3", "lag_t6", "roll3", "roll6", "fx_trend", "commodity_trend", "oil_index"],
+            "source_frequency": body.source_frequency or "monthly",
+            "note": "Series too short for feature-based regression; using naive last value with heuristic bands.",
+            "computed_at": datetime.now(timezone.utc).isoformat(),
         }
-    X = np.array([[v[i]] for i in range(len(v) - 1)])
-    y = np.array(v[1:])
-    model = LinearRegression().fit(X, y)
-    preds = []
-    cur = v[-1]
-    for step in range(h):
-        nxt = float(model.predict([[cur]])[0])
-        nxt = max(0.0, nxt)
-        preds.append({"step": step + 1, "value": round(nxt, 2)})
-        cur = nxt
-    return {
-        "method": "lag1_linear_regression",
+
+    def run_feature_ar(series, horizon):
+        if len(series) < 7:
+            last = max(0.0, float(series[-1])) if len(series) else 0.0
+            forecasts = [{"step": i + 1, "value": round(last, 2)} for i in range(horizon)]
+            intervals = [
+                {
+                    "step": i + 1,
+                    "lower80": round(max(0.0, last * 0.9), 2),
+                    "upper80": round(last * 1.1, 2),
+                    "lower95": round(max(0.0, last * 0.8), 2),
+                    "upper95": round(last * 1.2, 2),
+                }
+                for i in range(horizon)
+            ]
+            return {
+                "method": "naive_last_with_bands",
+                "forecast": forecasts,
+                "intervals": intervals,
+                "metrics": {"mae": None, "rmse": None, "backtest_points": 0},
+            }
+
+        X = []
+        y = []
+        for i in range(6, len(series)):
+            X.append(build_row(series, i))
+            y.append(float(series[i]))
+        Xn = np.array(X, dtype=float)
+        yn = np.array(y, dtype=float)
+        m = LinearRegression().fit(Xn, yn)
+        fitted = m.predict(Xn)
+        resid = yn - fitted
+        sigma = float(np.std(resid, ddof=1)) if len(resid) > 1 else 0.0
+
+        bt_k = min(6, max(0, len(series) - 7))
+        bt_abs = []
+        bt_sq = []
+        for offset in range(bt_k, 0, -1):
+            split = len(series) - offset
+            train = series[:split]
+            if len(train) < 7:
+                continue
+            Xtr = []
+            ytr = []
+            for i in range(6, len(train)):
+                Xtr.append(build_row(train, i))
+                ytr.append(float(train[i]))
+            if not Xtr:
+                continue
+            m_bt = LinearRegression().fit(np.array(Xtr, dtype=float), np.array(ytr, dtype=float))
+            feat = build_row(train + [0.0], len(train))
+            pred = max(0.0, float(m_bt.predict([feat])[0]))
+            actual = float(series[split])
+            bt_abs.append(abs(pred - actual))
+            bt_sq.append((pred - actual) ** 2)
+
+        mae = float(np.mean(bt_abs)) if bt_abs else None
+        rmse = float(np.sqrt(np.mean(bt_sq))) if bt_sq else None
+
+        work = list(series)
+        preds = []
+        intervals = []
+        z80 = 1.2816
+        z95 = 1.96
+        for step in range(1, horizon + 1):
+            feat = build_row(work + [0.0], len(work))
+            nxt = max(0.0, float(m.predict([feat])[0]))
+            sig_h = sigma * np.sqrt(step)
+            lo80 = max(0.0, nxt - z80 * sig_h)
+            hi80 = nxt + z80 * sig_h
+            lo95 = max(0.0, nxt - z95 * sig_h)
+            hi95 = nxt + z95 * sig_h
+            preds.append({"step": step, "value": round(nxt, 2)})
+            intervals.append(
+                {
+                    "step": step,
+                    "lower80": round(lo80, 2),
+                    "upper80": round(hi80, 2),
+                    "lower95": round(lo95, 2),
+                    "upper95": round(hi95, 2),
+                }
+            )
+            work.append(nxt)
+        return {
+            "method": "feature_autoregression_v2",
+            "forecast": preds,
+            "intervals": intervals,
+            "metrics": {
+                "mae": round(mae, 4) if mae is not None else None,
+                "rmse": round(rmse, 4) if rmse is not None else None,
+                "backtest_points": len(bt_abs),
+            },
+        }
+
+    primary = run_feature_ar(v, h)
+
+    payload = {
+        "method": primary["method"],
         "historical_values": v,
-        "forecast": preds,
-        "model_version": "f7-volume-v1",
+        "forecast": primary["forecast"],
+        "intervals": primary["intervals"],
+        "metrics": primary["metrics"],
+        "feature_names": ["lag_t1", "lag_t3", "lag_t6", "roll3", "roll6", "fx_trend", "commodity_trend", "oil_index"],
+        "source_frequency": body.source_frequency or "monthly",
+        "model_version": "f7-model-suite-v3",
         "computed_at": datetime.now(timezone.utc).isoformat(),
     }
+    return payload
 @app.post("/api/forecast/price-volatility")
 async def forecast_price_volatility(body: PriceVolatilityRequest):
     """F7 — log-return volatility from commodity price history (proxy, not FX)."""

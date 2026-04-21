@@ -3,6 +3,7 @@ import axios from "axios";
 import {
   LineChart,
   Line,
+  Area,
   XAxis,
   YAxis,
   Tooltip,
@@ -69,6 +70,7 @@ function Forecasts() {
       commodity,
       type: tradeType,
       horizon: Number(horizon) || 3,
+      fxPair,
     };
     if (country) bodyVol.country = country;
 
@@ -98,14 +100,29 @@ function Forecasts() {
             label: s.period,
             volume: s.totalVolume,
             kind: "actual",
+            lower80: null,
+            upper80: null,
+            lower95: null,
+            upper95: null,
           })),
-          ...(volumeResult.forecast || []).map((f) => ({
-            label: `F${f.step}`,
-            volume: f.value,
-            kind: "forecast",
-          })),
+          ...(volumeResult.forecast || []).map((f) => {
+            const band = (volumeResult.intervals || []).find((b) => b.step === f.step) || {};
+            return {
+              label: `F${f.step}`,
+              volume: f.value,
+              kind: "forecast",
+              lower80: band.lower80 ?? null,
+              upper80: band.upper80 ?? null,
+              lower95: band.lower95 ?? null,
+              upper95: band.upper95 ?? null,
+            };
+          }),
         ]
       : [];
+  const freqLabel =
+    volumeResult?.sourceFrequency === "annual"
+      ? "Annual total (USD value or units)"
+      : "Monthly total (USD value or units)";
 
   if (loading) {
     return <p className="text-neutral-400">Loading…</p>;
@@ -227,11 +244,28 @@ function Forecasts() {
             <code className="text-[#8ab4ff]">{volumeResult.method}</code>
             {volumeResult.note ? ` — ${volumeResult.note}` : ""}
           </p>
+          {volumeResult.sourceFrequency && (
+            <p className="text-neutral-500 text-xs mt-1">
+              Source frequency:{" "}
+              <code className="text-[#8ab4ff]">{volumeResult.sourceFrequency}</code>
+              {volumeResult.isInterpolated === false ? " (observed data only)" : ""}
+            </p>
+          )}
           {volumeResult.sourceNote && (
             <p className="text-neutral-500 text-xs mt-1">{volumeResult.sourceNote}</p>
           )}
           {volumeResult.expansionNote && (
             <p className="text-neutral-500 text-xs mt-1">{volumeResult.expansionNote}</p>
+          )}
+          {volumeResult.metrics && (
+            <p className="text-neutral-500 text-xs mt-1">
+              Backtest - MAE:{" "}
+              <code className="text-[#8ab4ff]">{volumeResult.metrics.mae ?? "n/a"}</code>
+              {" | "}RMSE:{" "}
+              <code className="text-[#8ab4ff]">{volumeResult.metrics.rmse ?? "n/a"}</code>
+              {" | "}Points:{" "}
+              <code className="text-[#8ab4ff]">{volumeResult.metrics.backtest_points ?? 0}</code>
+            </p>
           )}
           {chartRows.length > 0 && (
             <div className="h-72 mt-4">
@@ -250,10 +284,44 @@ function Forecasts() {
                     }}
                   />
                   <Legend wrapperStyle={{ color: "#d4d4d4" }} />
+                  <Area
+                    type="monotone"
+                    dataKey="upper95"
+                    stroke="none"
+                    fill="#8ab4ff"
+                    fillOpacity={0.08}
+                    name="95% upper"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="lower95"
+                    stroke="none"
+                    fill="#121212"
+                    fillOpacity={1}
+                    name="95% lower"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="upper80"
+                    stroke="#8ab4ff"
+                    strokeOpacity={0.35}
+                    strokeWidth={1}
+                    dot={false}
+                    name="80% band upper"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="lower80"
+                    stroke="#8ab4ff"
+                    strokeOpacity={0.35}
+                    strokeWidth={1}
+                    dot={false}
+                    name="80% band lower"
+                  />
                   <Line
                     type="monotone"
                     dataKey="volume"
-                    name="Monthly total (USD value or units)"
+                    name={freqLabel}
                     stroke="#8ab4ff"
                     strokeWidth={2.25}
                     dot={{ r: 3 }}

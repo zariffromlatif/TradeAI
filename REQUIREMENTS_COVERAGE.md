@@ -27,7 +27,7 @@ _Last reviewed with the codebase (Express, React, ML service, Mongo), including 
 
 | # | Requirement (summary) | Status | Notes / where to look |
 |---|-------------------------|--------|------------------------|
-| **7** | Dual-factor predictive engine (trade volume + **FX** volatility) | **Met** | **Volume:** `POST /api/analytics/forecast/volume` + ML `POST /api/forecast/trade-volume`, UI `/forecasts`. **Volatility:** real FX log-return volatility from synced `FxRate.history` via `POST /api/analytics/forecast/price-volatility` (`fxPair`). |
+| **7** | Dual-factor predictive engine (trade volume + **FX** volatility) | **Met** | **Volume:** Feature-AR forecast via `POST /api/analytics/forecast/volume` + ML `POST /api/forecast/trade-volume` with confidence bands and backtesting metadata shown in `/forecasts`. **Volatility:** real FX log-return volatility from synced `FxRate.history` via `POST /api/analytics/forecast/price-volatility` (`fxPair`). |
 | **8** | Automated country risk scoring | **Partial** | ML + Express bridge; indicators fed from DB are **limited** (e.g. inflation, trade balance, placeholder GDP) vs “full macro + trade stability + real-time market.” |
 | **9** | Risk interpretability panel | **Met** | `RiskScorePanel.jsx`, `RiskBreakdownPanel.jsx`, `POST /api/analytics/risk/:country/breakdown` → ML |
 

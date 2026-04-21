@@ -17,8 +17,8 @@ Set API base via `frontend/.env` (see `frontend/.env.example`) using `VITE_API_B
 
 - `Dashboard` (`/dashboard`) — KPI cards and import/export charts
 - `Commodities` (`/commodities`) — trend visualization and provenance
-- `Compare` (`/compare`) — dual-country comparison
-- `Forecasts` (`/forecasts`) — trade-volume forecast + real FX volatility
+- `Compare` (`/compare`) — dual-country comparison with official/fallback status
+- `Forecasts` (`/forecasts`) — Feature-AR trade-volume forecast + real FX volatility
 - `Advisory` (`/advisory`) — rule-based recommendations
 - `Marketplace` (`/orders`) — RFQ board, quote flow, and deal settlement tracking
 - `Risk score` / `Risk explain` (`/risk`, `/risk/breakdown`)
@@ -28,6 +28,7 @@ Set API base via `frontend/.env` (see `frontend/.env.example`) using `VITE_API_B
 
 - Theme: monochrome UI with subtle accent, shared utility classes in `src/index.css`.
 - Charts: Recharts-based, tuned for dark contrast/readability.
-- Forecast volatility now uses real FX pairs from backend `GET /api/analytics/fx/pairs`.
+- Forecast volume uses Feature-AR output with uncertainty bands and source-frequency metadata from backend.
+- Forecast volatility uses real FX pairs from backend `GET /api/analytics/fx/pairs`.
 - Marketplace actions now use Bearer JWT (no `x-user-id` headers); role-based behavior is enforced by backend.
 - Dashboard supports verified-data fallback mode and empty-state messaging when verified records are unavailable.

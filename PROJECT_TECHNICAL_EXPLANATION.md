@@ -91,7 +91,7 @@ This document describes how the **TradeAI** repository is structured, how the th
 | File | Responsibility |
 |------|----------------|
 | `dashboardStats.js` | `getDashboardAggregates()` — top 5 countries by export/import; verified-data-first with all-record fallback metadata. |
-| `forecastData.js` | `getMonthlyVolumeSeries({ commodityId, countryId, type })` — monthly sum of `volume` from `TradeRecord` where `reporter` = country when country is set. |
+| `forecastData.js` | Builds series for ML with official-first + fallback matching, frequency detection (annual/monthly), and metadata (`sourceFrequency`, `isInterpolated`, `expansionNote`, `sourceNote`). |
 | `advisoryRules.js` | `logReturnSampleStd(prices)`, `buildRecommendations(signals)` — threshold-based strings (risk band, deficit, inflation, volatility). |
 | `orderAnomaly.js` | `evaluateSimulatedOrder` — hard cap on quantity, deviation from `currentPrice`, implied unit-price stats from historical trade, volume percentile heuristics; returns human-readable reasons. |
 
@@ -125,7 +125,7 @@ This document describes how the **TradeAI** repository is structured, how the th
 | `POST /api/risk-score` | Single-country score + full breakdown embedded in result. |
 | `POST /api/risk-score/batch` | Max 20 payloads; used for comparative / bulk scenarios. |
 | `POST /api/risk/{country_code}/breakdown` | Validates URL code matches body; returns dimension scores + `indicator_breakdown` for UI explainability. |
-| `POST /api/forecast/trade-volume` | Lag-1 `LinearRegression` iterated for horizon; naive “last value” if series too short. |
+| `POST /api/forecast/trade-volume` | Feature autoregression (lags + rolling features + optional exogenous trend inputs), with 80/95 bands and backtest metrics; naive fallback if the series is too short. |
 | `POST /api/forecast/price-volatility` | Log returns, sample standard deviation, optional rolling window stats. |
 | `ml-service/requirements.txt` | Pins FastAPI, uvicorn, sklearn, numpy, pydantic, etc. |
 
@@ -156,10 +156,10 @@ This document describes how the **TradeAI** repository is structured, how the th
 |------|------|
 | `Dashboard.jsx` | Fetches `GET /analytics/dashboard`, Recharts bars, stat cards, **PDF** download from `GET /reports/trade-summary` as blob. |
 | `CommodityTrends.jsx` | Lists commodities, loads one by id, charts `priceHistory`. |
-| `ComparativeAnalysis.jsx` | Fetches `GET /analytics/compare` with country pair, type, commodity; area chart + brush. |
+| `ComparativeAnalysis.jsx` | Fetches `GET /analytics/compare` with country pair, type, commodity; shows official/fallback data status and commodity-fallback notice when needed. |
 | `Alerts.jsx` | Lists anomaly orders from `GET /orders/anomalies`. |
 | `Orders.jsx` | RFQ marketplace UI: create RFQs, browse RFQ board, submit/accept quotes, and update deal settlement status. |
-| `Forecasts.jsx` | Form for commodity/country/type/horizon + FX pair → volume forecast + real FX volatility chart stats. |
+| `Forecasts.jsx` | Form for commodity/country/type/horizon + FX pair → volume forecast + real FX volatility chart stats, including confidence bands and source-frequency transparency labels. |
 | `Advisory.jsx` | `POST /advisory/recommend` with country + optional commodity; renders severity-styled recommendation cards. |
 | `Simulation.jsx` | Tabs: profitability vs landed-cost; posts to `/api/sim/*`. |
 | `Premium.jsx` | Initiates Stripe session or demo upgrade (`POST /payment/demo-upgrade` when enabled). |

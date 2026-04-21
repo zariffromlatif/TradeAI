@@ -1,15 +1,15 @@
 # TradeAI — Pending work guidelines (Members B, C & D)
 
-This document tracks what is **done** vs **remaining** for the frontend, ML, and operations tracks. Last updated: **JWT marketplace authz + dashboard fallback + data-health endpoint**.
+This file is kept for historical tracking. The core B/C/D scope is now implemented; use `README.md` + `REQUIREMENTS_COVERAGE.md` for current source of truth.
 
 ---
 
-## Status snapshot
+## Status snapshot (current)
 
 | Area | Done | Still open |
 |------|------|------------|
 | **Member B** | F1, F2, F4, F16, dashboard empty-state/fallback UX | Optional polish only |
-| **Member C** | F8; F9; F7 (**real FX**); **F14** | — |
+| **Member C** | F8; F9; F7 (Feature-AR volume + real FX); **F14** | — |
 | **Member D** | F10 marketplace RFQ + deals + role/ownership authz; F5 Stripe + docs + demo payment; F11; F13; **F15 PDF** | — |
 
 ---
@@ -44,7 +44,7 @@ This document tracks what is **done** vs **remaining** for the frontend, ML, and
 | **F8** | `ml-service/main.py` — `POST /api/risk-score`; Express: `GET /api/analytics/risk/:country`, `POST /api/analytics/risk-score` |
 | **F9 (ML + API)** | `POST /api/risk/{code}/breakdown` in ML; `POST /api/analytics/risk/:country/breakdown` in Express |
 | **Batch risk (for compare / tools)** | `POST /api/analytics/risk-score/batch` proxies to ML |
-| **F7** | `POST /api/forecast/trade-volume`, `POST /api/forecast/price-volatility` in ML; Express `POST /api/analytics/forecast/volume`, `.../price-volatility`, `GET /api/analytics/fx/pairs`; FX sync script `backend/scripts/syncFxRates.js`; UI `Forecasts.jsx` `/forecasts` |
+| **F7** | `POST /api/forecast/trade-volume` (Feature-AR + bands + metrics), `POST /api/forecast/price-volatility` in ML; Express `POST /api/analytics/forecast/volume`, `.../price-volatility`, `GET /api/analytics/fx/pairs`; FX sync script `backend/scripts/syncFxRates.js`; UI `Forecasts.jsx` `/forecasts` |
 | **F14** | `POST /api/advisory/recommend`; `services/advisoryRules.js`; `routes/advisory.js`; UI `Advisory.jsx` `/advisory` (Express-only rules; ML for risk score) |
 
 ### Pending (Member C)
@@ -104,4 +104,4 @@ This document tracks what is **done** vs **remaining** for the frontend, ML, and
 
 ---
 
-*Update this file when C/D ship new features.*
+*Historical note: prefer updating `README.md` and `REQUIREMENTS_COVERAGE.md` for current documentation.*

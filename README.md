@@ -61,7 +61,7 @@ A **checklist table** for all **16** spec items (Modules 1–4), with **Met / Pa
 
 ## Forecasts (Feature 7)
 
-- **Dual factor:** (1) **Trade volume** — monthly totals from `TradeRecord.volume` (optional filters: commodity, country, import/export), forecast via lag-1 linear regression in the ML service (naive fallback if the series is short). (2) **FX volatility** — log-return volatility from real historical exchange-rate series stored in `FxRate.history`.
+- **Dual factor:** (1) **Trade volume** — Feature-AR model (lags + rolling + exogenous FX/commodity trends) with prediction bands and backtest metrics; supports commodity/country/type filters with aggregate fallback when needed. (2) **FX volatility** — log-return volatility from real historical exchange-rate series stored in `FxRate.history`.
 - **Express:** `POST /api/analytics/forecast/volume` (body: `commodity`, optional `country`, `type`, `horizon`) and `POST /api/analytics/forecast/price-volatility` (body: `fxPair`, optional fallback inputs). Both proxy to the ML service on port **8000**.
 - **ML:** `POST /api/forecast/trade-volume`, `POST /api/forecast/price-volatility` in `ml-service/main.py`.
 - **UI:** `frontend/src/pages/Forecasts.jsx`, route **`/forecasts`**.
@@ -252,11 +252,11 @@ Open **3 terminals simultaneously**:
 | `partner` | Counterparty country |
 | `type` | `export` = reporter exports **to** partner; `import` = reporter imports **from** partner |
 
-Dashboard top exporters/importers and country analytics aggregate by **`reporter`**. **Compare** charts national totals per selected country (sum over all partners for that reporter).
+Dashboard top exporters/importers and country analytics aggregate by **`reporter`**. **Compare** prefers official national totals (`reporter -> WLD`) when available and shows an **Official data / Fallback data** badge in UI.
 
 **Upgrading from older data:** remove legacy trade documents, then run `node backend/scripts/syncTradeFlows.js` and/or `node backend/seed.js`.
 
-**Deployment / real charts:** configure `TRADE_SYNC_COUNTRY_CODES` and run `node backend/scripts/syncTradeFlows.js`. The script ingests free World Bank annual imports/exports (USD) as reporter-vs-world records so Compare and Forecast have stable non-zero series.
+**Deployment / real charts:** configure `TRADE_SYNC_COUNTRY_CODES` and run `node backend/scripts/syncTradeFlows.js`. The script ingests free World Bank annual imports/exports (USD) as reporter-vs-world records (`source=world_bank_api`) so Compare and Forecast have stable non-zero series.
 
 ---
 

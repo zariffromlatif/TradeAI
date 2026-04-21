@@ -1,6 +1,6 @@
 # TradeAI — Pending work guidelines (Members B, C & D)
 
-This document turns the project’s **16-feature master list** into actionable next steps for the frontend, ML, and operations tracks. It assumes **Member A**’s backend work (secured CRUD, analytics APIs, order anomalies) is in place.
+This document is archived planning context from earlier phases. For current implementation status, use `README.md` and `REQUIREMENTS_COVERAGE.md`.
 
 ---
 
@@ -13,7 +13,7 @@ This document turns the project’s **16-feature master list** into actionable n
 | **F1** Dashboard UI / trade rankings | `frontend/src/pages/Dashboard.jsx` — `GET /api/analytics/dashboard` |
 | **F2** Commodity price trends | `frontend/src/pages/CommodityTrends.jsx` — `GET /api/commodities`, `GET /api/commodities/:id` |
 
-### Pending
+### Historical pending items (now implemented in main branch)
 
 #### F4 — Comparative intelligence tool
 
@@ -70,7 +70,7 @@ This document turns the project’s **16-feature master list** into actionable n
 | **F8** Automated risk scoring | `ml-service/main.py` — `POST /api/risk-score`; backend proxies via `GET /api/analytics/risk/:country`, `POST /api/analytics/risk-score` |
 | **F9** (ML + API) Interpretability | `POST /api/risk/{code}/breakdown` in ML; `POST /api/analytics/risk/:country/breakdown` in Express |
 
-### Pending / partial
+### Historical pending / partial notes
 
 #### F9 — Risk interpretability in the product (UI wiring)
 
@@ -96,9 +96,8 @@ This document turns the project’s **16-feature master list** into actionable n
 
 **Deliverables**
 
-- New FastAPI endpoints (names flexible), e.g. `POST /api/forecast/volumes`, `POST /api/forecast/fx-volatility`.
-- Start simple: moving average / linear trend / naive baseline; upgrade to ARIMA/Prophet if time permits.
-- Proxy each from Express under `/api/analytics/...` for a single origin for the frontend.
+- Implemented as `POST /api/forecast/trade-volume` (Feature-AR with uncertainty bands + backtest metrics) and `POST /api/forecast/price-volatility`.
+- Proxied via Express under `/api/analytics/...` for a single frontend origin.
 
 #### F14 — AI-driven advisory engine
 
@@ -127,7 +126,7 @@ This document turns the project’s **16-feature master list** into actionable n
 | **F10** (API) Simulated orders | `backend/routes/orders.js`, `models/Order.js` — CRUD, `GET /api/orders/anomalies` |
 | **F5** (partial) Payments | `backend/routes/payment.js` — **Stripe** checkout + webhook → `User.tier` |
 
-### Pending
+### Historical pending notes
 
 #### F10 — End-to-end simulated order **workflow** (UI)
 
@@ -144,7 +143,7 @@ This document turns the project’s **16-feature master list** into actionable n
 
 #### F5 — Payment gateway vs spec
 
-- Spec referenced **SSLCommerz**; implementation uses **Stripe**. Either implement SSLCommerz for regional alignment or formally document **Stripe (test)** as the chosen gateway.
+- Current repository standard is **Stripe** (test mode supported, plus `DEMO_PAYMENT` for local demos). SSLCommerz is out of scope unless explicitly required.
 
 **Frontend gap**
 

@@ -320,7 +320,13 @@ router.post("/risk-score/batch", async (req, res) => {
 // POST /api/analytics/forecast/volume — F7: monthly volume → ML forecast
 router.post("/forecast/volume", async (req, res) => {
   try {
-    const { commodity, country, type = "export", horizon = 1 } = req.body;
+    const {
+      commodity,
+      country,
+      type = "export",
+      horizon = 1,
+      fxPair,
+    } = req.body;
     if (!commodity) {
       return res.status(400).json({ message: "commodity (ObjectId) is required" });
     }
@@ -352,23 +358,60 @@ router.post("/forecast/volume", async (req, res) => {
     if (!rawSeries.length) {
       return res.status(400).json({ message: "No trade rows for this filter" });
     }
-    const { seriesForMl, expanded } = prepareVolumeSeriesForMl(rawSeries);
+    const { seriesForMl, sourceFrequency, isInterpolated, expansionNote } =
+      prepareVolumeSeriesForMl(rawSeries);
     const values = seriesForMl.map((s) => s.totalVolume);
     const h = Math.min(12, Math.max(1, Number(horizon) || 1));
+    // Generic exogenous signals for all commodities/countries/types.
+    let fxTrend = 0;
+    if (fxPair) {
+      const docFx = await FxRate.findOne({ pair: String(fxPair).toUpperCase() })
+        .select("history")
+        .lean();
+      const fxRates = [...(docFx?.history || [])]
+        .sort((a, b) => new Date(a.date) - new Date(b.date))
+        .map((r) => Number(r.rate))
+        .filter((n) => Number.isFinite(n) && n > 0);
+      if (fxRates.length >= 6) {
+        const n = fxRates.length;
+        fxTrend = (fxRates[n - 1] - fxRates[n - 6]) / fxRates[n - 6];
+      }
+    }
+    let commodityTrend = 0;
+    let oilIndex = 0;
+    const selectedCommodity = await Commodity.findById(usedCommodityId)
+      .select("name priceHistory")
+      .lean();
+    const prices = [...(selectedCommodity?.priceHistory || [])]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((p) => Number(p.price))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    if (prices.length >= 6) {
+      const n = prices.length;
+      commodityTrend = (prices[n - 1] - prices[n - 6]) / prices[n - 6];
+    }
+    if ((selectedCommodity?.name || "").toLowerCase().includes("oil") && prices.length > 0) {
+      oilIndex = prices[prices.length - 1];
+    }
     const response = await axios.post(`${ML_BASE}/api/forecast/trade-volume`, {
       values,
       horizon: h,
+      source_frequency: sourceFrequency,
+      exogenous: {
+        fx_trend: fxTrend,
+        commodity_trend: commodityTrend,
+        oil_index: oilIndex,
+      },
     });
-    const expansionNote = expanded
-      ? "Annual observations were split evenly across 12 months so the forecast model has enough points; totals per year are preserved."
-      : undefined;
     res.json({
       ...response.data,
-      series: expanded ? seriesForMl : rawSeries,
+      series: seriesForMl,
       rawSeries,
       expansionNote,
       sourceNote,
       usedCommodityId,
+      sourceFrequency,
+      isInterpolated,
     });
   } catch (err) {
     const msg =
@@ -509,6 +552,47 @@ router.get("/compare", async (req, res) => {
     const aggRow = await Commodity.findOne({ name: "All Commodities (HS TOTAL)" })
       .select("_id")
       .lean();
+    const hasVerifiedOfficialRows =
+      (await TradeRecord.countDocuments(REAL_TRADE_MATCH)) > 0;
+    const baseMatch = hasVerifiedOfficialRows ? REAL_TRADE_MATCH : {};
+
+    const fetchSeriesForCommodity = async (commodityIdOrNull) => {
+      const nationalExtra = await getNationalPartnerMatch(commodityIdOrNull, {
+        relaxed: !hasVerifiedOfficialRows,
+      });
+      const buildMatch = (reporterId) => {
+        const m = {
+          reporter: reporterId,
+          type: flowType,
+          ...baseMatch,
+          ...nationalExtra,
+        };
+        if (commodityIdOrNull) {
+          m.commodity = commodityIdOrNull;
+        }
+        return m;
+      };
+
+      const monthlyPipeline = (reporterId) => [
+        { $match: buildMatch(reporterId) },
+        {
+          $group: {
+            _id: {
+              year: { $year: "$date" },
+              month: { $month: "$date" },
+            },
+            totalValue: { $sum: { $ifNull: ["$value", 0] } },
+          },
+        },
+        { $sort: { "_id.year": 1, "_id.month": 1 } },
+      ];
+      const [a, b] = await Promise.all([
+        TradeRecord.aggregate(monthlyPipeline(cA._id)),
+        TradeRecord.aggregate(monthlyPipeline(cB._id)),
+      ]);
+      return { seriesA: a, seriesB: b, nationalExtra };
+    };
+
     let commodityOid = null;
     if (commodity && commodity !== "all") {
       commodityOid = new mongoose.Types.ObjectId(commodity);
@@ -516,41 +600,22 @@ router.get("/compare", async (req, res) => {
       commodityOid = aggRow._id;
     }
 
-    const nationalExtra = await getNationalPartnerMatch(commodityOid);
+    let commodityFallbackApplied = false;
+    let { seriesA, seriesB, nationalExtra } = await fetchSeriesForCommodity(commodityOid);
 
-    // National totals per reporter — two separate pipelines so reporter A/B cannot
-    // be merged incorrectly (avoids duplicate identical series in the UI).
-    const buildMatch = (reporterId) => {
-      const m = {
-        reporter: reporterId,
-        type: flowType,
-        ...REAL_TRADE_MATCH,
-        ...nationalExtra,
-      };
-      if (commodityOid) {
-        m.commodity = commodityOid;
-      }
-      return m;
-    };
-
-    const monthlyPipeline = (reporterId) => [
-      { $match: buildMatch(reporterId) },
-      {
-        $group: {
-          _id: {
-            year: { $year: "$date" },
-            month: { $month: "$date" },
-          },
-          totalValue: { $sum: { $ifNull: ["$value", 0] } },
-        },
-      },
-      { $sort: { "_id.year": 1, "_id.month": 1 } },
-    ];
-
-    const [seriesA, seriesB] = await Promise.all([
-      TradeRecord.aggregate(monthlyPipeline(cA._id)),
-      TradeRecord.aggregate(monthlyPipeline(cB._id)),
-    ]);
+    // If selected commodity has no records, fallback to aggregate "all products" so users still get
+    // a meaningful comparison rather than a blank chart.
+    if (
+      commodity &&
+      commodity !== "all" &&
+      seriesA.length === 0 &&
+      seriesB.length === 0 &&
+      aggRow?._id
+    ) {
+      commodityFallbackApplied = true;
+      commodityOid = aggRow._id;
+      ({ seriesA, seriesB, nationalExtra } = await fetchSeriesForCommodity(commodityOid));
+    }
 
     const byDate = new Map();
 
@@ -582,6 +647,7 @@ router.get("/compare", async (req, res) => {
         countryB: { code: cB.code, name: cB.name },
         type: flowType,
         usesNationalTotals: Object.keys(nationalExtra).length > 0,
+        commodityFallbackApplied,
       },
       data: formattedData,
     });

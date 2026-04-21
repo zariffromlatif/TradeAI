@@ -82,7 +82,7 @@ TradeAI/
 │   ├── models/               ← MongoDB schemas (Mongoose)
 │   │   ├── Country.js        ← name, code, region, GDP, inflation, tradeBalance
 │   │   ├── Commodity.js      ← name, category, unit, currentPrice, priceHistory[]
-│   │   └── TradeRecord.js    ← country (ref), commodity (ref), type, volume, value, date
+│   │   └── TradeRecord.js    ← reporter (ref), partner (ref), commodity, type, volume/value, date
 │   │
 │   └── routes/               ← Express API route handlers
 │       ├── countries.js      ← CRUD for countries
@@ -228,11 +228,12 @@ Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
 
 ## Notes
 
-- Use `backend/.env` for `MONGO_URI`, JWT, Stripe, and trade sync settings.
+- Use `backend/.env` for `MONGO_URI`, JWT, Stripe, and trade sync settings (`TRADE_SYNC_COUNTRY_CODES`, `TRADE_SYNC_YEAR_SPAN`, timeout/retry knobs).
 - Configure `CORS_ORIGINS` in production to allow only deployed frontend domains.
 - Forecast/risk endpoints that proxy ML require FastAPI running on `127.0.0.1:8000`.
 - Legacy `/api/orders` remains available; marketplace deals are stored with `Order.source = "rfq"`.
 - **TradeRecord schema:** uses `reporter` + `partner` (not `country`). After pulling this change, clear `traderecords` in Mongo or re-seed, then run `syncTradeFlows.js` so World Bank national totals (reporter-vs-world) match the new shape.
+- **Compare behavior:** API marks `usesNationalTotals` and UI shows `Official data` or `Fallback data` badge. For commodities with no rows, compare can fallback to overall totals.
 
 ---
 

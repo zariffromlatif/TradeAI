@@ -25,15 +25,18 @@ async function ensureWorldCountry() {
  * When national (reporter–World) rows exist, aggregates should use them only — not sums of bilateral
  * flows, which are wrong for national totals and often produce identical values across countries.
  */
-async function getNationalPartnerMatch(mongooseCommodityId) {
+async function getNationalPartnerMatch(mongooseCommodityId, options = {}) {
+  const { relaxed = false } = options;
   const world = await Country.findOne({ code: WORLD_CODE }).select("_id").lean();
   if (!world) return {};
 
   const q = {
     partner: world._id,
-    isVerified: true,
-    source: SOURCE_OK,
   };
+  if (!relaxed) {
+    q.isVerified = true;
+    q.source = SOURCE_OK;
+  }
   if (mongooseCommodityId) {
     q.commodity = mongooseCommodityId;
   }

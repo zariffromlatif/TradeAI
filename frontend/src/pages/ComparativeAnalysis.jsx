@@ -135,13 +135,31 @@ function ComparativeAnalysis() {
 
       {/* Visualization */}
       <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
-        <h2 className="text-neutral-100 font-semibold mb-3">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <h2 className="text-neutral-100 font-semibold">
           {/* NEW: Dynamic Chart Title based on selected product */}
-          {meta ? `${meta.countryA.name} vs ${meta.countryB.name} — ${tradeType === 'export' ? 'Export' : 'Import'} Volume (${getCommodityLabel()})` : 'Loading Comparison...'}
-        </h2>
+            {meta ? `${meta.countryA.name} vs ${meta.countryB.name} — ${tradeType === 'export' ? 'Export' : 'Import'} Volume (${getCommodityLabel()})` : 'Loading Comparison...'}
+          </h2>
+          {meta && (
+            <span
+              className={`text-xs px-2.5 py-1 rounded-full border ${
+                meta.usesNationalTotals
+                  ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                  : "bg-amber-500/10 text-amber-300 border-amber-500/30"
+              }`}
+            >
+              {meta.usesNationalTotals ? "Official data" : "Fallback data"}
+            </span>
+          )}
+        </div>
         {meta?.usesNationalTotals && (
           <p className="text-neutral-500 text-xs mb-4">
             Values are official national totals (reporter vs world) from synced data — not sums of bilateral partner flows.
+          </p>
+        )}
+        {meta?.commodityFallbackApplied && (
+          <p className="text-neutral-500 text-xs mb-4">
+            No records found for the selected commodity across both countries; showing Overall Total (All Products) instead.
           </p>
         )}
         {meta && meta.usesNationalTotals === false && (

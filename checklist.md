@@ -17,7 +17,7 @@ _Last reviewed: JWT marketplace authz hardening + dashboard fallback + data-heal
 ## Member C — Intelligence Lead
 - [x] **F8** — Automated risk scoring (FastAPI + Express proxy)
 - [x] **F9** — Risk interpretability in-app — `/risk`, `/risk/breakdown` in `App.jsx`
-- [x] **F7** — Dual-factor predictive engine — monthly **trade volume** forecast + **real FX** log-return volatility from synced `FxRate` pairs; `POST /api/analytics/forecast/*`, `GET /api/analytics/fx/pairs`, ML `/api/forecast/*`, UI `/forecasts`
+- [x] **F7** — Dual-factor predictive engine — Feature-AR **trade volume** forecast (with confidence bands + backtest metrics) + **real FX** log-return volatility from synced `FxRate` pairs; `POST /api/analytics/forecast/*`, `GET /api/analytics/fx/pairs`, ML `/api/forecast/*`, UI `/forecasts`
 - [x] **F14** — Advisory engine — rule-based recommendations from ML risk + macro + optional commodity price volatility; `advisoryRules.js`, `routes/advisory.js`, UI `/advisory`
 
 ## Member D — Operations Lead
