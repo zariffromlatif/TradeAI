@@ -7,7 +7,7 @@
  * Tech: React + Tailwind + Recharts
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   RadarChart,
   Radar,
@@ -23,7 +23,8 @@ import {
   Cell,
   Legend,
 } from "recharts";
-import { ANALYTICS_API_BASE_URL } from "../config/api";
+// NEW: Also import your main API_BASE_URL to fetch the countries
+import { ANALYTICS_API_BASE_URL, API_BASE_URL } from "../config/api";
 
 const API_BASE = ANALYTICS_API_BASE_URL;
 
@@ -143,6 +144,9 @@ const INDICATOR_LABELS = {
 };
 
 export default function RiskScorePanel() {
+  // NEW: State to hold the database countries
+  const [countries, setCountries] = useState([]);
+
   const [countryCode, setCountryCode] = useState("");
   const [countryName, setCountryName] = useState("");
   const [indicators, setIndicators] = useState(DEFAULT_INDICATORS);
@@ -150,6 +154,35 @@ export default function RiskScorePanel() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("overview"); // overview | breakdown | radar
+
+  // NEW: Fetch countries when the page loads
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/countries`)
+      .then((res) => res.json())
+      .then((data) => {
+        // Filter out "World" so it doesn't show up in single-country scoring
+        const validCountries = data.filter(c => c.code !== "WLD" && !c.name.toLowerCase().includes("world"));
+        setCountries(validCountries);
+      })
+      .catch((err) => console.error("Failed to load countries:", err));
+  }, []);
+
+  // NEW: Synchronized dropdown handler
+  const handleCountrySelect = (e) => {
+    const selectedCode = e.target.value;
+    if (!selectedCode) {
+      setCountryCode("");
+      setCountryName("");
+      return;
+    }
+    
+    // Find the country object that matches the selected code
+    const selectedObj = countries.find((c) => c.code === selectedCode);
+    if (selectedObj) {
+      setCountryCode(selectedObj.code);
+      setCountryName(selectedObj.name);
+    }
+  };
 
   const handleIndicatorChange = (field, value) => {
     setIndicators((prev) => ({ ...prev, [field]: value }));
@@ -240,28 +273,42 @@ export default function RiskScorePanel() {
           </h2>
 
           <div className="grid grid-cols-2 gap-4 mb-5">
+            {/* UPDATED: Country Code Dropdown */}
             <div>
               <label className="text-xs text-neutral-500 mb-1 block">
                 Country Code (ISO-3)
               </label>
-              <input
+              <select
                 value={countryCode}
-                onChange={(e) => setCountryCode(e.target.value)}
-                placeholder="e.g. BGD"
-                maxLength={3}
+                onChange={handleCountrySelect}
                 className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
-              />
+              >
+                <option value="">Select Code...</option>
+                {countries.map((c) => (
+                  <option key={`code-${c.code}`} value={c.code}>
+                    {c.code}
+                  </option>
+                ))}
+              </select>
             </div>
+            
+            {/* UPDATED: Country Name Dropdown */}
             <div>
               <label className="text-xs text-neutral-500 mb-1 block">
                 Country Name
               </label>
-              <input
-                value={countryName}
-                onChange={(e) => setCountryName(e.target.value)}
-                placeholder="e.g. Bangladesh"
+              <select
+                value={countryCode} // Binding this to countryCode keeps them perfectly synced!
+                onChange={handleCountrySelect}
                 className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
-              />
+              >
+                <option value="">Select Country...</option>
+                {countries.map((c) => (
+                  <option key={`name-${c.code}`} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
