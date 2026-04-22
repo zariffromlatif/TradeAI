@@ -6,7 +6,7 @@ import { API_BASE_URL } from "../config/api";
 import {
   BarChart2, TrendingUp, GitCompare, Bell, Package, Shield,
   ClipboardList, Sparkles, Calculator, LineChart as LineChartIcon,
-  Lightbulb, LogOut, ShieldCheck
+  Lightbulb, LogOut, ShieldCheck, Activity
 } from "lucide-react";
 
 const API = API_BASE_URL;
@@ -31,6 +31,7 @@ function Navbar() {
     { to: "/orders", label: "Marketplace", icon: <Package size={16} /> },
     { to: "/risk", label: "Risk score", icon: <Shield size={16} /> },
     { to: "/risk/breakdown", label: "Risk explain", icon: <ClipboardList size={16} /> },
+    { to: "/sensitivity", label: "Stress Test", icon: <Activity size={16} /> },
     { to: "/premium", label: "Premium", icon: <Sparkles size={16} /> },
   ];
 

@@ -17,6 +17,7 @@ import Premium from "./pages/Premium";
 import Simulation from "./pages/Simulation";
 import Forecasts from "./pages/Forecasts";
 import Advisory from "./pages/Advisory";
+import SensitivityAnalysis from "./pages/SensitivityAnalysis";
 
 // Extract the layout so we can reuse it for both Public and Private routes
 const MainLayout = ({ children }) => (
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/risk" element={<ProtectedRoute><MainLayout><RiskScorePanel /></MainLayout></ProtectedRoute>} />
       <Route path="/risk/breakdown" element={<ProtectedRoute><MainLayout><RiskBreakdownPanel /></MainLayout></ProtectedRoute>} />
       <Route path="/sim" element={<ProtectedRoute><MainLayout><Simulation /></MainLayout></ProtectedRoute>} />
+      <Route path="/sensitivity" element={<ProtectedRoute><MainLayout><SensitivityAnalysis /></MainLayout></ProtectedRoute>} />
       <Route path="/forecasts" element={<ProtectedRoute><MainLayout><Forecasts /></MainLayout></ProtectedRoute>} />
       <Route path="/advisory" element={<ProtectedRoute><MainLayout><Advisory /></MainLayout></ProtectedRoute>} />
       <Route path="/premium" element={<ProtectedRoute><MainLayout><Premium /></MainLayout></ProtectedRoute>} />
