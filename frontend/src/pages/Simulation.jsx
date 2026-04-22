@@ -53,10 +53,14 @@ function Simulation() {
     axios
       .get(`${API}/commodities`)
       .then((res) => {
-        setCommodities(res.data);
-        // Automatically select the first commodity if available
-        if (res.data.length > 0) {
-          setPriceForm((f) => ({ ...f, commodityId: res.data[0]._id }));
+        // FIX: Filter out commodities that don't have a valid price
+        const pricedCommodities = res.data.filter(c => c.currentPrice != null && c.currentPrice > 0);
+        
+        setCommodities(pricedCommodities);
+        
+        // Automatically select the first priced commodity if available
+        if (pricedCommodities.length > 0) {
+          setPriceForm((f) => ({ ...f, commodityId: pricedCommodities[0]._id }));
         }
       })
       .catch((err) => console.error("Failed to load commodities:", err));
@@ -201,6 +205,8 @@ function Simulation() {
                 onChange={(e) => setPriceForm({ ...priceForm, commodityId: e.target.value })}
                 required
               >
+                {/* FIX: Add fallback if array is empty */}
+                {commodities.length === 0 && <option value="">No priced commodities available</option>}
                 {commodities.map(c => (
                   <option key={c._id} value={c._id}>{c.name}</option>
                 ))}

@@ -31,15 +31,20 @@ function ComparativeAnalysis() {
   // Fetch available countries and commodities for the dropdowns
   useEffect(() => {
     axios.get(`${API}/countries`).then((res) => {
-      setCountries(res.data);
-      if (res.data.length >= 2) {
-        setCountryA(res.data[0].code);
-        setCountryB(res.data[1].code);
-      }
+      // FIX 1: Filter out the "World" total from the country list entirely
+      const realCountries = res.data.filter(c => 
+        c.code !== "WLD" && 
+        !c.name.toLowerCase().includes("world")
+      );
+      setCountries(realCountries);
     }).catch(err => console.error("Failed to load countries:", err));
 
     axios.get(`${API}/commodities`).then((res) => {
-      setCommodities(res.data);
+      const cleanCommodities = res.data.filter(c => 
+        !c.name.toLowerCase().includes("hs total") && 
+        !c.name.toLowerCase().includes("all commodities")
+      );
+      setCommodities(cleanCommodities);
     }).catch(err => console.error("Failed to load commodities:", err));
   }, []);
 
@@ -60,7 +65,7 @@ function ComparativeAnalysis() {
       .finally(() => setLoading(false));
   }, [countryA, countryB, tradeType, commodity]);
 
-  // NEW: Helper function to get the display name of the selected product
+  // Helper function to get the display name of the selected product
   const getCommodityLabel = () => {
     if (commodity === "all") return "Overall Total (All Products)";
     const found = commodities.find((c) => c._id === commodity);
@@ -73,6 +78,7 @@ function ComparativeAnalysis() {
 
       {/* Control Panel */}
       <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5 flex flex-wrap gap-6 items-end">
+        
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-neutral-400">Comparison Country 1</label>
           <select 
@@ -80,7 +86,9 @@ function ComparativeAnalysis() {
             onChange={(e) => setCountryA(e.target.value)}
             className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 outline-none focus:border-[#8ab4ff]"
           >
-            {countries.map(c => (
+            <option value="">Select Country 1...</option>
+            {/* FIX 2A: Hide whatever is currently selected in Country B */}
+            {countries.filter(c => c.code !== countryB).map(c => (
               <option key={c._id} value={c.code}>{c.name} ({c.code})</option>
             ))}
           </select>
@@ -93,7 +101,9 @@ function ComparativeAnalysis() {
             onChange={(e) => setCountryB(e.target.value)}
             className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 outline-none focus:border-[#8ab4ff]"
           >
-            {countries.map(c => (
+            <option value="">Select Country 2...</option>
+            {/* FIX 2B: Hide whatever is currently selected in Country A */}
+            {countries.filter(c => c.code !== countryA).map(c => (
               <option key={c._id} value={c.code}>{c.name} ({c.code})</option>
             ))}
           </select>
@@ -137,8 +147,11 @@ function ComparativeAnalysis() {
       <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
         <div className="flex items-center justify-between gap-3 mb-3">
           <h2 className="text-neutral-100 font-semibold">
-          {/* NEW: Dynamic Chart Title based on selected product */}
-            {meta ? `${meta.countryA.name} vs ${meta.countryB.name} — ${tradeType === 'export' ? 'Export' : 'Import'} Volume (${getCommodityLabel()})` : 'Loading Comparison...'}
+            {!countryA || !countryB 
+              ? 'Select Countries to Compare' 
+              : meta 
+                ? `${meta.countryA.name} vs ${meta.countryB.name} — ${tradeType === 'export' ? 'Export' : 'Import'} Volume (${getCommodityLabel()})` 
+                : 'Loading Comparison...'}
           </h2>
           {meta && (
             <span
@@ -152,6 +165,7 @@ function ComparativeAnalysis() {
             </span>
           )}
         </div>
+        
         {meta?.usesNationalTotals && (
           <p className="text-neutral-500 text-xs mb-4">
             Values are official national totals (reporter vs world) from synced data — not sums of bilateral partner flows.
@@ -168,7 +182,9 @@ function ComparativeAnalysis() {
           </p>
         )}
 
-        {loading ? (
+        {!countryA || !countryB ? (
+          <p className="text-neutral-400 text-center py-16">Waiting for country selection...</p>
+        ) : loading ? (
           <p className="text-neutral-400 text-center py-16">Crunching comparison data...</p>
         ) : chartData.length === 0 ? (
           <p className="text-neutral-400 text-center py-16">No overlapping trade records found for this selection.</p>
@@ -190,14 +206,16 @@ function ComparativeAnalysis() {
               <YAxis tick={{ fill: "#a3a3a3", fontSize: 12 }} tickFormatter={(v) => `$${(v / 1000000).toFixed(0)}M`} />
               <Tooltip
                 contentStyle={{ backgroundColor: "#111111", border: "1px solid #2a2a2a", borderRadius: "10px", color: "#f5f5f5" }}
-                formatter={(value, name) => [
-                  `$${value.toLocaleString()}`, 
-                  name === meta?.countryA.code ? meta?.countryA.name : meta?.countryB.name
-                ]}
+                formatter={(value, name) => {
+                  const countryName = name === meta?.countryA.code ? meta?.countryA.name : meta?.countryB.name;
+                  return [`$${value.toLocaleString()}`, countryName];
+                }}
               />
               <Legend verticalAlign="top" height={36} wrapperStyle={{ color: "#d4d4d4" }} />
+              
               <Area type="monotone" dataKey={meta?.countryA.code} stroke="#8ab4ff" fillOpacity={1} fill="url(#colorA)" strokeWidth={2.25} name={meta?.countryA.code} />
               <Area type="monotone" dataKey={meta?.countryB.code} stroke="#e5e5e5" fillOpacity={1} fill="url(#colorB)" strokeWidth={2.25} name={meta?.countryB.code} />
+              
               <Brush 
                 dataKey="date" 
                 height={30} 
@@ -216,7 +234,6 @@ function ComparativeAnalysis() {
           <table className="w-full text-left text-sm text-neutral-400">
             <thead className="table-head">
               <tr>
-                {/* NEW: Dynamic Table Header */}
                 <th className="px-6 py-4 font-medium">Metric ({tradeType} - {getCommodityLabel()})</th>
                 <th className="px-6 py-4 font-medium text-[#8ab4ff]">{meta.countryA.name}</th>
                 <th className="px-6 py-4 font-medium text-neutral-200">{meta.countryB.name}</th>

@@ -26,9 +26,14 @@ function SensitivityAnalysis() {
   useEffect(() => {
     axios.get(`${API}/commodities`)
       .then((res) => {
-        setCommodities(res.data);
-        if (res.data.length > 0) {
-          setStrategy((s) => ({ ...s, commodityId: res.data[0]._id }));
+        // FIX: Strictly filter out any commodities that don't have a valid price
+        const tradableCommodities = res.data.filter(c => c.currentPrice != null && c.currentPrice > 0);
+        
+        setCommodities(tradableCommodities);
+        
+        // Auto-select the first valid commodity
+        if (tradableCommodities.length > 0) {
+          setStrategy((s) => ({ ...s, commodityId: tradableCommodities[0]._id }));
         }
       })
       .catch((err) => console.error("Failed to load commodities:", err));
@@ -91,6 +96,7 @@ function SensitivityAnalysis() {
                 value={strategy.commodityId}
                 onChange={(e) => setStrategy({ ...strategy, commodityId: e.target.value })}
               >
+                {commodities.length === 0 && <option value="">No priced commodities available</option>}
                 {commodities.map(c => (
                   <option key={c._id} value={c._id}>{c.name} (${c.currentPrice} / {c.unit})</option>
                 ))}
@@ -188,7 +194,7 @@ function SensitivityAnalysis() {
           
           <div className="bg-[#171717] border border-[#2a2a2a] rounded-2xl p-8 overflow-hidden relative shadow-2xl">
             
-            {/* Top Stats */}
+            {/* Top Stats - Shows PER UNIT and Totals */}
             <div className="flex flex-wrap justify-between items-start mb-16 gap-6">
               <h3 className="text-lg font-semibold text-neutral-100">Simulated Outcome</h3>
               
