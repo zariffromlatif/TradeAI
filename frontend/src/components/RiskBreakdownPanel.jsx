@@ -11,7 +11,7 @@
  * Endpoint: POST /api/risk/{country_code}/breakdown
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   BarChart,
   Bar,
@@ -22,7 +22,8 @@ import {
   ResponsiveContainer,
   LabelList,
 } from "recharts";
-import { ANALYTICS_API_BASE_URL } from "../config/api";
+// NEW: Imported API_BASE_URL to fetch countries
+import { ANALYTICS_API_BASE_URL, API_BASE_URL } from "../config/api";
 
 const API_BASE = ANALYTICS_API_BASE_URL;
 
@@ -261,6 +262,9 @@ const INDICATOR_LABELS = {
 };
 
 export default function RiskBreakdownPanel() {
+  // NEW: State to hold database countries
+  const [countries, setCountries] = useState([]);
+
   const [countryCode, setCountryCode] = useState("");
   const [countryName, setCountryName] = useState("");
   const [indicators, setIndicators] = useState(DEFAULT_INDICATORS);
@@ -269,6 +273,33 @@ export default function RiskBreakdownPanel() {
   const [error, setError] = useState(null);
   const [sortBy, setSortBy] = useState("score"); // score | dimension
   const [activeTab, setActiveTab] = useState("indicators"); // indicators | chart | dimensions
+
+  // NEW: Fetch countries on load
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/countries`)
+      .then((res) => res.json())
+      .then((data) => {
+        const validCountries = data.filter(c => c.code !== "WLD" && !c.name.toLowerCase().includes("world"));
+        setCountries(validCountries);
+      })
+      .catch((err) => console.error("Failed to load countries:", err));
+  }, []);
+
+  // NEW: Synced dropdown handler
+  const handleCountrySelect = (e) => {
+    const selectedCode = e.target.value;
+    if (!selectedCode) {
+      setCountryCode("");
+      setCountryName("");
+      return;
+    }
+    
+    const selectedObj = countries.find((c) => c.code === selectedCode);
+    if (selectedObj) {
+      setCountryCode(selectedObj.code);
+      setCountryName(selectedObj.name);
+    }
+  };
 
   const handleChange = (field, val) =>
     setIndicators((prev) => ({ ...prev, [field]: val }));
@@ -386,28 +417,42 @@ export default function RiskBreakdownPanel() {
             Country Inputs
           </h2>
           <div className="grid grid-cols-2 gap-4 mb-4">
+            {/* UPDATED: Country Code Dropdown */}
             <div>
               <label className="text-xs text-neutral-500 mb-1 block">
                 Country Code (ISO-3)
               </label>
-              <input
+              <select
                 value={countryCode}
-                onChange={(e) => setCountryCode(e.target.value)}
-                placeholder="e.g. BGD"
-                maxLength={3}
+                onChange={handleCountrySelect}
                 className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
-              />
+              >
+                <option value="">Select Code...</option>
+                {countries.map((c) => (
+                  <option key={`code-${c.code}`} value={c.code}>
+                    {c.code}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            {/* UPDATED: Country Name Dropdown */}
             <div>
               <label className="text-xs text-neutral-500 mb-1 block">
                 Country Name
               </label>
-              <input
-                value={countryName}
-                onChange={(e) => setCountryName(e.target.value)}
-                placeholder="e.g. Bangladesh"
+              <select
+                value={countryCode} // Bound to code to keep them synced
+                onChange={handleCountrySelect}
                 className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
-              />
+              >
+                <option value="">Select Country...</option>
+                {countries.map((c) => (
+                  <option key={`name-${c.code}`} value={c.code}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
