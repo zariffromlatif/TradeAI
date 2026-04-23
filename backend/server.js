@@ -97,7 +97,7 @@ app.use((err, req, res, _next) => {
 });
 
 // Start Server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
   console.log(`🚀 TradeAI Backend Server is running on http://localhost:${PORT}`);
 });

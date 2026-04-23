@@ -2,7 +2,7 @@ const path = require("node:path");
 const axios = require("axios");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-const API_BASE = process.env.API_BASE_URL || "http://localhost:5000/api";
+const API_BASE = process.env.API_BASE_URL || "http://localhost:5001/api";
 
 function assert(condition, message) {
   if (!condition) {
