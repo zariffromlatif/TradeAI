@@ -12,12 +12,6 @@ const CommoditySchema = new mongoose.Schema(
     unit: { type: String }, // e.g. "barrel", "ton", "troy oz"
     currentPrice: { type: Number },
     priceHistory: [PriceHistorySchema],
-    source: { type: String, default: null },
-    sourceUrl: { type: String, default: null },
-    asOf: { type: Date, default: null },
-    ingestedAt: { type: Date, default: null },
-    verified: { type: Boolean, default: false },
-    qualityFlags: [{ type: String }],
   },
   { timestamps: true },
 );
