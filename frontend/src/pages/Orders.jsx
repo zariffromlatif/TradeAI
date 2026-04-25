@@ -296,6 +296,20 @@ function Orders() {
       setError(err.response?.data?.message || "Accept quote failed.");
     }
   };
+  const sendToSimulator = (rfq, quote) => {
+  const simData = {
+    quantity: rfq.targetQuantity,
+    unitCostUsd: quote.offeredPrice,
+    freightUsd: quote.freight,
+    insuranceUsd: quote.insurance,
+    dutiesUsd: quote.dutiesEstimate,
+  };
+
+  // store globally or route
+  localStorage.setItem("simData", JSON.stringify(simData));
+
+  window.location.href = "/simulation";
+};
 
   const updateSettlement = async (dealId, settlementStatus) => {
     try {
@@ -744,6 +758,12 @@ function Orders() {
                                   Lead {quote.leadTimeDays} days • status {quote.status}
                                 </p>
                               </div>
+                              <button
+                                onClick={() => sendToSimulator(rfqDetail, quote)}
+                                className="btn-ui btn-primary"
+                              >
+                                Simulate
+                              </button>
                               {quote.status === "submitted" &&
                               !["selection", "completed", "cancelled"].includes(rfqDetail.state) ? (
                                 <button

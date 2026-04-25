@@ -65,6 +65,27 @@ function Simulation() {
       })
       .catch((err) => console.error("Failed to load commodities:", err));
   }, []);
+  useEffect(() => {
+  const saved = localStorage.getItem("simData");
+  if (saved) {
+    const data = JSON.parse(saved);
+
+    setProfitForm((f) => ({
+      ...f,
+      quantity: data.quantity || f.quantity,
+      unitCostUsd: data.unitCostUsd || f.unitCostUsd,
+    }));
+
+    setLandedForm((f) => ({
+      ...f,
+      units: data.quantity || f.units,
+      fobUsd: data.unitCostUsd * data.quantity || f.fobUsd,
+      freightUsd: data.freightUsd || f.freightUsd,
+      insuranceUsd: data.insuranceUsd || f.insuranceUsd,
+    }));
+    setTab("landed");
+  }
+}, []);
 
   // Helper to get the currently selected commodity object
   const selectedCommodity = commodities.find(c => c._id === priceForm.commodityId) || null;
