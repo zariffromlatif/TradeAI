@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LinearRegression
 
 app = FastAPI(
     title="TradeAI ML Service",
@@ -105,6 +106,23 @@ class CommodityRiskRequest(BaseModel):
                 }
             }
         }
+
+
+class VolumeForecastRequest(BaseModel):
+    values: list[float] = Field(..., min_length=1)
+    horizon: int = Field(1, ge=1, le=12)
+    source_frequency: Optional[str] = Field("monthly")
+    exogenous: Optional[dict] = None
+
+
+class PriceVolatilityRequest(BaseModel):
+    prices: list[float] = Field(..., min_length=3)
+
+
+class OptimalRangeRequest(BaseModel):
+    historical_prices: list[float] = Field(..., min_length=5)
+    fx_volatility: float = 0.0
+    shipping_cost_index: float = 1.0
 
 
 INDICATOR_CONFIG = [
@@ -463,4 +481,179 @@ async def commodity_risk_breakdown(commodity_code: str, payload: CommodityRiskRe
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Forecast Endpoints (F7) ────────────────────────────────────────────────
+@app.post("/api/forecast/optimal-bid-range")
+async def optimal_bid_range(body: OptimalRangeRequest):
+    p = np.array([float(x) for x in body.historical_prices if np.isfinite(float(x))], dtype=float)
+    if len(p) < 5:
+        raise HTTPException(status_code=400, detail="Need at least 5 valid historical prices")
+    base_mean = float(np.mean(p))
+    base_std = float(np.std(p, ddof=1)) if len(p) > 1 else 0.0
+    volatility_factor = 1.0 + min(max(body.fx_volatility, 0.0), 1.0) * 0.5
+    shipping_factor = min(max(body.shipping_cost_index, 0.7), 1.5)
+    adj_std = base_std * volatility_factor * shipping_factor
+    low = max(0.0, base_mean - 1.0 * adj_std)
+    high = base_mean + 1.0 * adj_std
+    return {
+        "recommended_min": round(low, 2),
+        "recommended_max": round(high, 2),
+        "reference_mean": round(base_mean, 2),
+        "reference_std": round(base_std, 4),
+        "confidence": "MEDIUM" if len(p) < 20 else "HIGH",
+        "note": "Heuristic optimal range based on historical bid prices, FX volatility and shipping index."
+    }
+
+
+@app.post("/api/forecast/trade-volume")
+async def forecast_trade_volume(body: VolumeForecastRequest):
+    v = [float(x) for x in body.values if x is not None and np.isfinite(float(x))]
+    if len(v) < 1:
+        raise HTTPException(status_code=400, detail="No valid volume values")
+
+    h = int(body.horizon)
+    ex = body.exogenous or {}
+    fx_trend = float(ex.get("fx_trend", 0.0) or 0.0)
+    commodity_trend = float(ex.get("commodity_trend", 0.0) or 0.0)
+    oil_index = float(ex.get("oil_index", 0.0) or 0.0)
+
+    def build_row(series, idx):
+        t1 = float(series[idx - 1])
+        t3 = float(series[idx - 3])
+        t6 = float(series[idx - 6])
+        win3 = float(np.mean(series[idx - 3:idx]))
+        win6 = float(np.mean(series[idx - 6:idx]))
+        return [t1, t3, t6, win3, win6, fx_trend, commodity_trend, oil_index]
+
+    if len(v) < 7:
+        last = max(0.0, v[-1])
+        fc = [{"step": i + 1, "value": round(last, 2)} for i in range(h)]
+        intervals = [
+            {
+                "step": i + 1,
+                "lower80": round(max(0.0, last * 0.9), 2),
+                "upper80": round(last * 1.1, 2),
+                "lower95": round(max(0.0, last * 0.8), 2),
+                "upper95": round(last * 1.2, 2),
+            }
+            for i in range(h)
+        ]
+        return {
+            "method": "naive_last_with_bands",
+            "historical_values": v,
+            "forecast": fc,
+            "intervals": intervals,
+            "metrics": {"mae": None, "rmse": None, "backtest_points": 0},
+            "feature_names": ["lag_t1", "lag_t3", "lag_t6", "roll3", "roll6", "fx_trend", "commodity_trend", "oil_index"],
+            "source_frequency": body.source_frequency or "monthly",
+            "note": "Series too short for feature-based regression; using naive last value with heuristic bands.",
+            "computed_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+    X = []
+    y = []
+    for i in range(6, len(v)):
+        X.append(build_row(v, i))
+        y.append(float(v[i]))
+    Xn = np.array(X, dtype=float)
+    yn = np.array(y, dtype=float)
+    m = LinearRegression().fit(Xn, yn)
+    fitted = m.predict(Xn)
+    resid = yn - fitted
+    sigma = float(np.std(resid, ddof=1)) if len(resid) > 1 else 0.0
+
+    bt_k = min(6, max(0, len(v) - 7))
+    bt_abs = []
+    bt_sq = []
+    for offset in range(bt_k, 0, -1):
+        split = len(v) - offset
+        train = v[:split]
+        if len(train) < 7:
+            continue
+        Xtr = []
+        ytr = []
+        for j in range(6, len(train)):
+            Xtr.append(build_row(train, j))
+            ytr.append(float(train[j]))
+        if not Xtr:
+            continue
+        m_bt = LinearRegression().fit(np.array(Xtr, dtype=float), np.array(ytr, dtype=float))
+        feat = build_row(train + [0.0], len(train))
+        pred = max(0.0, float(m_bt.predict([feat])[0]))
+        actual = float(v[split])
+        bt_abs.append(abs(pred - actual))
+        bt_sq.append((pred - actual) ** 2)
+
+    mae = float(np.mean(bt_abs)) if bt_abs else None
+    rmse = float(np.sqrt(np.mean(bt_sq))) if bt_sq else None
+
+    work = list(v)
+    preds = []
+    intervals = []
+    z80 = 1.2816
+    z95 = 1.96
+    for step in range(1, h + 1):
+        feat = build_row(work + [0.0], len(work))
+        nxt = max(0.0, float(m.predict([feat])[0]))
+        sig_h = sigma * np.sqrt(step)
+        lo80 = max(0.0, nxt - z80 * sig_h)
+        hi80 = nxt + z80 * sig_h
+        lo95 = max(0.0, nxt - z95 * sig_h)
+        hi95 = nxt + z95 * sig_h
+        preds.append({"step": step, "value": round(nxt, 2)})
+        intervals.append(
+            {
+                "step": step,
+                "lower80": round(lo80, 2),
+                "upper80": round(hi80, 2),
+                "lower95": round(lo95, 2),
+                "upper95": round(hi95, 2),
+            }
+        )
+        work.append(nxt)
+
+    return {
+        "method": "feature_autoregression_v2",
+        "historical_values": v,
+        "forecast": preds,
+        "intervals": intervals,
+        "metrics": {
+            "mae": round(mae, 4) if mae is not None else None,
+            "rmse": round(rmse, 4) if rmse is not None else None,
+            "backtest_points": len(bt_abs),
+        },
+        "feature_names": ["lag_t1", "lag_t3", "lag_t6", "roll3", "roll6", "fx_trend", "commodity_trend", "oil_index"],
+        "source_frequency": body.source_frequency or "monthly",
+        "model_version": "f7-model-suite-v3",
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@app.post("/api/forecast/price-volatility")
+async def forecast_price_volatility(body: PriceVolatilityRequest):
+    p = np.array([float(x) for x in body.prices], dtype=float)
+    if np.any(p <= 0):
+        raise HTTPException(status_code=400, detail="All prices must be positive")
+    log_ret = np.diff(np.log(p))
+    log_ret = log_ret[np.isfinite(log_ret)]
+    if len(log_ret) < 2:
+        raise HTTPException(status_code=400, detail="Not enough valid returns")
+    overall = float(np.std(log_ret, ddof=1))
+    w = min(6, len(log_ret))
+    rolling = []
+    for i in range(w - 1, len(log_ret)):
+        seg = log_ret[i - w + 1 : i + 1]
+        rolling.append(
+            {"end_index": int(i), "volatility": round(float(np.std(seg, ddof=1)), 6)}
+        )
+    return {
+        "log_return_sample_std": round(overall, 6),
+        "observations": len(p),
+        "return_count": len(log_ret),
+        "rolling_window": w,
+        "rolling_volatility": rolling,
+        "note": "Commodity price volatility proxy from priceHistory (not FX).",
+        "computed_at": datetime.now(timezone.utc).isoformat(),
+    }
 
