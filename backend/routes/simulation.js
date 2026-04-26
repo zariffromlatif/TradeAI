@@ -1,4 +1,5 @@
 const express = require("express");
+const { requireAuth, requireMinTier } = require("../middleware/auth");
 
 const router = express.Router();
 
@@ -9,7 +10,7 @@ function num(v, fallback) {
 }
 
 // POST /api/sim/profitability — tariff on (quantity × unitCostUsd), 0–1
-router.post("/profitability", (req, res) => {
+router.post("/profitability", requireAuth, requireMinTier("gold"), (req, res) => {
   const quantity = num(req.body.quantity, 1);
   const unitRevenueUsd = num(req.body.unitRevenueUsd, 0);
   const unitCostUsd = num(req.body.unitCostUsd, 0);
@@ -65,7 +66,7 @@ router.post("/profitability", (req, res) => {
 });
 
 // POST /api/sim/landed-cost — CIF + duty on CIF; optional fxRate (local per 1 USD)
-router.post("/landed-cost", (req, res) => {
+router.post("/landed-cost", requireAuth, requireMinTier("gold"), (req, res) => {
   const units = num(req.body.units, 1);
   const fobUsd = num(req.body.fobUsd, 0);
   const freightUsd = num(req.body.freightUsd, 0);

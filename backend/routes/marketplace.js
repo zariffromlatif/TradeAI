@@ -6,7 +6,7 @@ const MarketplaceQuote = require("../models/MarketplaceQuote");
 const Commodity = require("../models/Commodity");
 const Country = require("../models/Country");
 const Order = require("../models/Order");
-const { requireAuth, attachUser } = require("../middleware/auth");
+const { requireAuth, attachUser, requireMinTier } = require("../middleware/auth");
 const { quoteProfitability, landedCost } = require("../services/quoteFinance");
 const { canTransition, assertCanBid, detectPriceAnomaly } = require("../services/rfqGuard");
 const { computeBidScore } = require("../services/bidScoring");
@@ -56,7 +56,7 @@ function isSellerRole(user) {
   return hasAnyRole(user, ["seller", "admin"]);
 }
 
-router.get("/rfqs", async (req, res) => {
+router.get("/rfqs", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const { page, limit, skip } = parsePager(req.query);
     const filter = {};
@@ -146,7 +146,7 @@ router.post("/rfqs", requireAuth, attachUser, async (req, res) => {
   }
 });
 
-router.get("/rfqs/:id", async (req, res) => {
+router.get("/rfqs/:id", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const rfq = await MarketplaceRfq.findById(req.params.id)
       .populate("commodity", "name category unit")
@@ -279,7 +279,7 @@ router.post("/rfqs/:id/quotes", requireAuth, attachUser, async (req, res) => {
   }
 });
 
-router.get("/rfqs/:id/quotes", async (req, res) => {
+router.get("/rfqs/:id/quotes", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const { page, limit, skip } = parsePager(req.query);
     const filter = { rfqId: req.params.id };
@@ -359,7 +359,7 @@ router.post("/quotes/:id/accept", requireAuth, attachUser, async (req, res) => {
           quantity: rfq.targetQuantity,
           pricePerUnit: quote.offeredPrice,
           totalValue: Number(rfq.targetQuantity) * Number(quote.offeredPrice),
-          status: "active",
+          status: "confirmed",
           source: "rfq",
           rfqId: rfq._id,
           quoteId: quote._id,
@@ -398,7 +398,7 @@ router.post("/quotes/:id/accept", requireAuth, attachUser, async (req, res) => {
   }
 });
 
-router.get("/rfqs/:id/comparison-matrix", async (req, res) => {
+router.get("/rfqs/:id/comparison-matrix", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const quotes = await MarketplaceQuote.find({
       rfqId: req.params.id,
@@ -429,7 +429,7 @@ router.get("/rfqs/:id/comparison-matrix", async (req, res) => {
   }
 });
 
-router.get("/deals", requireAuth, attachUser, async (req, res) => {
+router.get("/deals", requireAuth, attachUser, requireMinTier("gold"), async (req, res) => {
   try {
     if (!req.auth?.sub) {
       return res.status(401).json({ message: "Authentication required." });
@@ -519,6 +519,36 @@ router.post("/quotes/landed-cost", requireAuth, attachUser, async (req, res) => 
     res.json(result);
   } catch (err) {
     res.status(400).json({ message: err.message });
+  }
+});
+
+// GET purchase price (commodity + country)
+router.get("/price-estimate", async (req, res) => {
+  try {
+    const { commodityId, countryId } = req.query;
+
+    const commodity = await Commodity.findById(commodityId);
+    if (!commodity) {
+      return res.status(404).json({ message: "Commodity not found" });
+    }
+
+    let basePrice = commodity.currentPrice || 0;
+
+    // simple country adjustment (you can improve later)
+    let countryFactor = 1;
+    if (countryId) {
+      countryFactor = 1.05;
+    }
+
+    const estimatedPrice = basePrice * countryFactor;
+
+    res.json({
+      commodity: commodity.name,
+      basePrice,
+      estimatedPrice,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

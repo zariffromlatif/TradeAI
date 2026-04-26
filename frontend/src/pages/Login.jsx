@@ -32,7 +32,12 @@ export default function Login() {
       await login(form.email, form.password, rememberMe);
       navigate(from, { replace: true });
     } catch (err) {
-      const msg = err.response?.data?.message || err.response?.data?.errors?.[0]?.msg || "Login failed";
+      console.error("Login error:", err);
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.errors?.[0]?.msg ||
+        err.message ||
+        "Login failed";
       setError(msg);
     } finally {
       setLoading(false);

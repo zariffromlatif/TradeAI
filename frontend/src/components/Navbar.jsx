@@ -217,7 +217,7 @@ function Navbar() {
                   </div>
                   <div className="hidden sm:flex flex-col items-start text-left">
                     <span className="text-sm font-medium text-neutral-200 leading-tight">{user?.name || "User"}</span>
-                    {user?.tier && (
+                    {user?.tier && user.role !== "admin" && (
                       <span className="text-[10px] text-amber-200/90 font-medium leading-tight">
                         {tierLabel(user.tier)}
                       </span>

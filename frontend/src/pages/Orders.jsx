@@ -27,7 +27,7 @@ function Orders() {
   const [optimalRange, setOptimalRange] = useState(null);
   const [profitResult, setProfitResult] = useState(null);
 
-  const [rfqForm, setRfqForm] = useState({
+  const initialRfqForm = {
     title: "",
     specs: "",
     commodity: "",
@@ -37,9 +37,9 @@ function Orders() {
     unit: "MT",
     requiredIncoterm: "FOB",
     preferredDeliveryWindow: "",
-  });
+  };
 
-  const [quoteForm, setQuoteForm] = useState({
+  const initialQuoteForm = {
     offeredPrice: "",
     currency: "USD",
     leadTimeDays: "",
@@ -51,7 +51,10 @@ function Orders() {
     fxRate: "1",
     validityDate: "",
     notes: "",
-  });
+  };
+
+  const [rfqForm, setRfqForm] = useState(initialRfqForm);
+  const [quoteForm, setQuoteForm] = useState(initialQuoteForm);
 
   const [filters, setFilters] = useState({
     rfqStatus: "",
@@ -235,30 +238,42 @@ function Orders() {
 
   const submitQuote = async (e) => {
     e.preventDefault();
-    if (!selectedRfqId) return;
+    if (!selectedRfqId) {
+      setError("Select an RFQ before submitting a quote.");
+      return;
+    }
+    if (!user || user.role !== "seller") {
+      setError("Only seller accounts can submit quotes.");
+      return;
+    }
+    if (!quoteForm.validityDate) {
+      setError("Please select a quote validity date.");
+      return;
+    }
+
     setSubmittingQuote(true);
     setError("");
     try {
+      const payload = {
+        offeredPrice: Number(quoteForm.offeredPrice),
+        currency: quoteForm.currency || "USD",
+        leadTimeDays: Number(quoteForm.leadTimeDays),
+        minOrderQty: Number(quoteForm.minOrderQty),
+        freight: Number(quoteForm.freight),
+        insurance: Number(quoteForm.insurance),
+        dutiesEstimate: Number(quoteForm.dutiesEstimate),
+        unitProcurementCost: Number(quoteForm.unitProcurementCost),
+        fxRate: Number(quoteForm.fxRate),
+        validityDate: quoteForm.validityDate,
+        notes: quoteForm.notes,
+      };
+
       await axios.post(
         `${API}/marketplace/rfqs/${selectedRfqId}/quotes`,
-        {
-          ...quoteForm,
-          offeredPrice: Number(quoteForm.offeredPrice),
-          leadTimeDays: Number(quoteForm.leadTimeDays),
-          minOrderQty: Number(quoteForm.minOrderQty),
-          freight: Number(quoteForm.freight),
-          insurance: Number(quoteForm.insurance),
-          dutiesEstimate: Number(quoteForm.dutiesEstimate),
-        },
+        payload,
         { headers: authHeaders },
       );
-      setQuoteForm((f) => ({
-        ...f,
-        offeredPrice: "",
-        leadTimeDays: "",
-        notes: "",
-        unitProcurementCost: "",
-      }));
+      setQuoteForm(initialQuoteForm);
       await Promise.all([loadRfqDetail(selectedRfqId), loadRfqs()]);
     } catch (err) {
       setError(err.response?.data?.message || "Quote submit failed.");
@@ -304,9 +319,9 @@ function Orders() {
   const simData = {
     quantity: rfq.targetQuantity,
     unitCostUsd: quote.offeredPrice,
+    totalFOB: rfq.targetQuantity * quote.offeredPrice,
     freightUsd: quote.freight,
     insuranceUsd: quote.insurance,
-    dutiesUsd: quote.dutiesEstimate,
   };
 
   // store globally or route
@@ -710,17 +725,28 @@ function Orders() {
                         className="bg-[#171717] border border-[#2a2a2a] rounded-lg px-3 py-2 text-sm text-neutral-100 md:col-span-2"
                         placeholder="Quote notes"
                       />
-                      <div className="md:col-span-2 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={simulateProfit}
-                          className="btn-ui btn-secondary mr-2"
-                        >
-                          Simulate margin
-                        </button>
-                        <button type="submit" disabled={submittingQuote} className="btn-ui btn-primary">
-                          {submittingQuote ? "Submitting…" : "Submit quote"}
-                        </button>
+                      <div className="md:col-span-2 flex flex-col gap-2">
+                        {user?.role !== "seller" && (
+                          <p className="text-xs text-yellow-300">
+                            Only seller accounts can submit RFQ quotes. Please login with a seller account to place a bid.
+                          </p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={simulateProfit}
+                            className="btn-ui btn-secondary"
+                          >
+                            Simulate margin
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={submittingQuote || !selectedRfqId || user?.role !== "seller"}
+                            className="btn-ui btn-primary"
+                          >
+                            {submittingQuote ? "Submitting…" : "Submit quote"}
+                          </button>
+                        </div>
                       </div>
                     </form>
                     {profitResult && (

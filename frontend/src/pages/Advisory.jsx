@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 import { Lightbulb, Loader2 } from "lucide-react";
 import { API_BASE_URL } from "../config/api";
+import { useAuth } from "../context/AuthContext";
 
 const API = API_BASE_URL;
 
@@ -20,6 +21,7 @@ function Advisory() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState(null);
+  const { api } = useAuth();
 
   useEffect(() => {
     setLoadingLists(true);
@@ -48,7 +50,7 @@ function Advisory() {
     try {
       const body = { countryCode };
       if (commodity) body.commodity = commodity;
-      const res = await axios.post(`${API}/advisory/recommend`, body);
+      const res = await api().post(`${API}/advisory/recommend`, body);
       setResult(res.data);
     } catch (err) {
       setError(

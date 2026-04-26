@@ -8,7 +8,7 @@ const API = API_BASE_URL;
 
 export default function PaymentRequests() {
   const { token, user, refreshTokenClaims } = useAuth();
-  const [amount, setAmount] = useState("0");
+  const [amount, setAmount] = useState("29.99");
   const [currency, setCurrency] = useState("USD");
   const [note, setNote] = useState("");
   const [requestTierUpgrade, setRequestTierUpgrade] = useState(true);
@@ -16,6 +16,13 @@ export default function PaymentRequests() {
   const [rows, setRows] = useState([]);
   const [error, setError] = useState("");
   const [info, setInfo] = useState("");
+
+  useEffect(() => {
+    if (requestTierUpgrade) {
+      if (requestedTier === "gold") setAmount("29.99");
+      else if (requestedTier === "diamond") setAmount("79.99");
+    }
+  }, [requestedTier, requestTierUpgrade]);
 
   const loadMine = () =>
     axios

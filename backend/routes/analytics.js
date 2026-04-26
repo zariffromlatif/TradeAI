@@ -481,7 +481,7 @@ router.post("/risk-score/batch", requireAuth, requireMinTier("gold"), async (req
 });
 
 // POST /api/analytics/forecast/volume — F7: monthly volume → ML forecast
-router.post("/forecast/volume", requireAuth, async (req, res) => {
+router.post("/forecast/volume", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const {
       commodity,
@@ -596,7 +596,7 @@ router.post("/forecast/volume", requireAuth, async (req, res) => {
   }
 });
 
-router.post("/forecast/optimal-bid-range", requireAuth, async (req, res) => {
+router.post("/forecast/optimal-bid-range", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const response = await axios.post(
       `${ML_BASE}/api/forecast/optimal-bid-range`,
@@ -615,7 +615,7 @@ router.post("/forecast/optimal-bid-range", requireAuth, async (req, res) => {
 });
 
 // POST /api/analytics/forecast/price-volatility — F7: priceHistory → volatility proxy (auth: any tier)
-router.post("/forecast/price-volatility", requireAuth, async (req, res) => {
+router.post("/forecast/price-volatility", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const { fxPair, baseCurrency, quoteCurrency, commodity } = req.body;
     const normalizedPair = String(

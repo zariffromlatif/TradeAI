@@ -8,7 +8,9 @@ const UserSchema = new mongoose.Schema(
     tier: {
       type: String,
       enum: ["silver", "gold", "diamond"],
-      default: "silver",
+      default: function () {
+        return this.role === "admin" ? undefined : "silver";
+      },
     },
     role: {
       type: String,
@@ -18,7 +20,15 @@ const UserSchema = new mongoose.Schema(
     stripeCustomerId: { type: String },
   },
   { timestamps: true },
-  
 );
+
+UserSchema.pre("save", function (next) {
+  if (this.role === "admin") {
+    this.tier = undefined;
+  } else if (!this.tier) {
+    this.tier = "silver";
+  }
+  next();
+});
 
 module.exports = mongoose.model("User", UserSchema);

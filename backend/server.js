@@ -61,9 +61,12 @@ app.use((req, res, next) => {
 // Rate limiter for auth routes (anti brute-force)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,   // 15 minutes
-  max: 30,
+  max: process.env.NODE_ENV === "production" ? 30 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  message: {
+    message: "Too many authentication requests. Please wait a few minutes and try again.",
+  },
 });
 
 // MongoDB Connection

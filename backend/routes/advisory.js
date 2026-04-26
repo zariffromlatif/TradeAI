@@ -1,5 +1,6 @@
 const express = require("express");
 const axios = require("axios");
+const { requireAuth, requireMinTier } = require("../middleware/auth");
 const Country = require("../models/Country");
 const Commodity = require("../models/Commodity");
 const {
@@ -14,7 +15,7 @@ const router = express.Router();
 const ML_BASE = "http://127.0.0.1:8000";
 
 // POST /api/advisory/recommend — F14 rule-based advisory (uses ML for risk score)
-router.post("/recommend", async (req, res) => {
+router.post("/recommend", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
     const { countryCode, commodity } = req.body;
     if (!countryCode || typeof countryCode !== "string") {

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { Calculator } from "lucide-react";
 import { API_BASE_URL } from "../config/api";
+import { useAuth } from "../context/AuthContext";
 
 const API = API_BASE_URL;
 
@@ -14,6 +15,10 @@ function Simulation() {
 
   // Fetch commodities from database
   const [commodities, setCommodities] = useState([]);
+
+  // Fetch countires from database
+  const [countries, setCountries] = useState([]);
+  const [countryId, setCountryId] = useState("");
 
   // Form States
   const [priceForm, setPriceForm] = useState({
@@ -43,6 +48,32 @@ function Simulation() {
   const [profitResult, setProfitResult] = useState(null);
   const [landedResult, setLandedResult] = useState(null);
   const [error, setError] = useState("");
+  const { api } = useAuth();
+
+  useEffect(() => {
+    if (priceResult?.estimatedPrice) {
+      setProfitForm((f) => ({
+        ...f,
+        unitCostUsd: priceResult.estimatedPrice,
+        quantity: priceForm.quantity,
+      }));
+      setTab("profit");
+    }
+  }, [priceResult, priceForm.quantity]);
+
+  useEffect(() => {
+  const quantity = Number(profitForm.quantity);
+  const unitCost = Number(profitForm.unitCostUsd);
+
+  if (!quantity || !unitCost) return;
+
+    setLandedForm((f) => ({
+    ...f,
+    units: quantity,
+    fobUsd: quantity * unitCost,
+    })
+    );
+  }, [profitForm.quantity, profitForm.unitCostUsd]);
   
   // Loading States
   const [loadingProfit, setLoadingProfit] = useState(false);
@@ -50,72 +81,69 @@ function Simulation() {
 
   // Load commodities on mount
   useEffect(() => {
-    axios
-      .get(`${API}/commodities`)
-      .then((res) => {
-        // FIX: Filter out commodities that don't have a valid price
-        const pricedCommodities = res.data.filter(c => c.currentPrice != null && c.currentPrice > 0);
-        
-        setCommodities(pricedCommodities);
-        
-        // Automatically select the first priced commodity if available
-        if (pricedCommodities.length > 0) {
-          setPriceForm((f) => ({ ...f, commodityId: pricedCommodities[0]._id }));
+    Promise.all([
+      axios.get(`${API}/commodities`),
+      axios.get(`${API}/countries`)
+    ])
+      .then(([resCommodities, resCountries]) => {
+        const priced = resCommodities.data.filter(
+          (c) => c.currentPrice != null && c.currentPrice > 0
+        );
+
+        setCommodities(priced);
+        setCountries(resCountries.data);
+
+        if (priced.length > 0) {
+          setPriceForm((f) => ({ ...f, commodityId: priced[0]._id }));
         }
       })
-      .catch((err) => console.error("Failed to load commodities:", err));
+      .catch((err) => console.error(err));
   }, []);
-  useEffect(() => {
-  const saved = localStorage.getItem("simData");
-  if (saved) {
-    const data = JSON.parse(saved);
 
-    setProfitForm((f) => ({
-      ...f,
-      quantity: data.quantity || f.quantity,
-      unitCostUsd: data.unitCostUsd || f.unitCostUsd,
-    }));
-
-    setLandedForm((f) => ({
-      ...f,
-      units: data.quantity || f.units,
-      fobUsd: data.unitCostUsd * data.quantity || f.fobUsd,
-      freightUsd: data.freightUsd || f.freightUsd,
-      insuranceUsd: data.insuranceUsd || f.insuranceUsd,
-    }));
-    setTab("landed");
-  }
-}, []);
 
   // Helper to get the currently selected commodity object
   const selectedCommodity = commodities.find(c => c._id === priceForm.commodityId) || null;
 
   // --- Calculation Functions ---
 
-  const runPriceEstimator = (e) => {
+  const runPriceEstimator = async (e) => {
     e.preventDefault();
     setError("");
     setPriceResult(null);
 
-    if (!selectedCommodity) {
-      setError("Please select a commodity first.");
-      return;
-    }
-    if (!selectedCommodity.currentPrice) {
-      setError("Price data is not available for this commodity.");
+    if (!priceForm.commodityId) {
+      setError("Please select a commodity before calculating price.");
       return;
     }
 
-    const total = Number(priceForm.quantity) * selectedCommodity.currentPrice;
-    
-    setPriceResult({
-      commodityName: selectedCommodity.name,
-      unit: selectedCommodity.unit,
-      quantity: Number(priceForm.quantity),
-      pricePerUnit: selectedCommodity.currentPrice,
-      totalUsd: total
-    });
+    const chosenCommodity = commodities.find((c) => c._id === priceForm.commodityId);
+    if (!chosenCommodity) {
+      setError("Selected commodity not found.");
+      return;
+    }
+
+    try {
+      const res = await axios.get(`${API}/marketplace/price-estimate`, {
+        params: {
+          commodityId: priceForm.commodityId,
+          countryId: countryId,
+        },
+      });
+
+      setPriceResult(res.data);
+    } catch (err) {
+      // Fallback to client-side estimate when backend is unavailable
+      const countryFactor = countryId ? 1.05 : 1;
+      setPriceResult({
+        commodity: chosenCommodity.name,
+        basePrice: chosenCommodity.currentPrice,
+        estimatedPrice: chosenCommodity.currentPrice * countryFactor,
+      });
+      setError("");
+    }
   };
+
+  
 
   const runProfitability = async (e) => {
     e.preventDefault();
@@ -130,8 +158,16 @@ function Simulation() {
         tariffRate: Number(profitForm.tariffRate),
         otherCostsUsd: Number(profitForm.otherCostsUsd),
       };
-      const res = await axios.post(`${API}/sim/profitability`, body);
+      const res = await api().post(`${API}/sim/profitability`, body);
       setProfitResult(res.data);
+      localStorage.setItem(
+        "simData",
+        JSON.stringify({
+          quantity: body.quantity,
+          unitCostUsd: body.unitCostUsd,
+          totalFOB: body.quantity * body.unitCostUsd,
+        })
+      );
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Request failed.");
     } finally {
@@ -154,7 +190,7 @@ function Simulation() {
       };
       const fx = landedForm.fxRate.trim();
       if (fx !== "") body.fxRate = Number(fx);
-      const res = await axios.post(`${API}/sim/landed-cost`, body);
+      const res = await api().post(`${API}/sim/landed-cost`, body);
       setLandedResult(res.data);
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Request failed.");
@@ -233,6 +269,21 @@ function Simulation() {
                 ))}
               </select>
             </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-neutral-400">Country</span>
+              <select
+                className={inputClass}
+                value={countryId}
+                onChange={(e) => setCountryId(e.target.value)}
+              >
+                <option value="">Select country</option>
+                {countries.map((c) => (
+                  <option key={c._id} value={c._id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-neutral-400">
@@ -268,12 +319,12 @@ function Simulation() {
               <h3 className="text-neutral-100 font-semibold">Base Price Result</h3>
               <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-neutral-300">
                 <dt>Commodity</dt>
-                <dd className="text-right text-neutral-100">{priceResult.commodityName}</dd>
+                <dd className="text-right text-neutral-100">{priceResult.commodity}</dd>
                 <dt>Total Volume</dt>
-                <dd className="text-right">{priceResult.quantity.toLocaleString()} {priceResult.unit}s</dd>
+                <dd className="text-right">{Number(priceForm.quantity).toLocaleString()} {selectedCommodity?.unit}</dd>
                 <dt className="text-[#8ab4ff] mt-2">Total Base Cost (USD)</dt>
                 <dd className="text-right text-[#8ab4ff] font-medium mt-2 text-lg">
-                  ${priceResult.totalUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  ${(priceResult.estimatedPrice * Number(priceForm.quantity)).toLocaleString()}
                 </dd>
               </dl>
             </div>
@@ -490,6 +541,6 @@ function Simulation() {
       )}
     </div>
   );
-}
 
+};
 export default Simulation;

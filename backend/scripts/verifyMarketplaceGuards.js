@@ -1,14 +1,16 @@
 const path = require("node:path");
 const axios = require("axios");
+const mongoose = require("mongoose");
+const User = require("../models/User");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
 
-const API_BASE = process.env.API_BASE_URL || "http://localhost:5001/api";
+const API_BASE = process.env.API_BASE_URL || "http://localhost:5000/api";
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function ensureUser({ name, email, password, role }) {
+async function ensureUser({ name, email, password, role, tier = "silver" }) {
   try {
     await axios.post(`${API_BASE}/auth/register`, {
       name,
@@ -21,10 +23,19 @@ async function ensureUser({ name, email, password, role }) {
     if (!String(message).includes("Email already registered")) throw err;
   }
   const login = await axios.post(`${API_BASE}/auth/login`, { email, password });
+  const user = login.data?.user;
+  // Update tier if different
+  if (user.tier !== tier) {
+    await User.findByIdAndUpdate(user.id, { tier });
+    // Re-login
+    const newLogin = await axios.post(`${API_BASE}/auth/login`, { email, password });
+    return newLogin.data?.token;
+  }
   return login.data?.token;
 }
 
 async function run() {
+  await mongoose.connect(process.env.MONGO_URI);
   const password = "Password123!";
   const runTag = Date.now().toString();
   const buyerToken = await ensureUser({
@@ -32,12 +43,14 @@ async function run() {
     email: `buyer.guard.${runTag}@tradeai.local`,
     password,
     role: "buyer",
+    tier: "gold",
   });
   const sellerToken = await ensureUser({
     name: "Seller Guard",
     email: `seller.guard.${runTag}@tradeai.local`,
     password,
     role: "seller",
+    tier: "gold",
   });
 
   const buyerHeaders = { Authorization: `Bearer ${buyerToken}` };

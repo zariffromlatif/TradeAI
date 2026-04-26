@@ -53,10 +53,10 @@ function AppRoutes() {
       <Route path="/trade-balance" element={<MainLayout><TradeBalance /></MainLayout>} />
 
       {/* PRIVATE ROUTES — Has Navbar AND is wrapped in ProtectedRoute */}
-      <Route path="/compare" element={<ProtectedRoute><MainLayout><ComparativeAnalysis /></MainLayout></ProtectedRoute>} />
+      <Route path="/compare" element={<MainLayout><ComparativeAnalysis /></MainLayout>} />
       <Route path="/alerts" element={<ProtectedRoute><MainLayout><Alerts /></MainLayout></ProtectedRoute>} />
       <Route path="/orders" element={<ProtectedRoute><MainLayout><Orders /></MainLayout></ProtectedRoute>} />
-      <Route path="/simulation" element={<Simulation />} />
+      <Route path="/simulation" element={<ProtectedRoute><MainLayout><Simulation /></MainLayout></ProtectedRoute>} />
       <Route path="/risk" element={<ProtectedRoute><MainLayout><RiskScorePanel /></MainLayout></ProtectedRoute>} />
       <Route path="/risk/breakdown" element={<ProtectedRoute><MainLayout><RiskBreakdownPanel /></MainLayout></ProtectedRoute>} />
       <Route path="/sim" element={<ProtectedRoute><MainLayout><Simulation /></MainLayout></ProtectedRoute>} />

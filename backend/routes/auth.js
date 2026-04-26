@@ -11,11 +11,11 @@ function signToken(user, rememberMe = false) {
   const expiresIn = rememberMe
     ? process.env.JWT_REMEMBER_EXPIRES_IN || "14d"
     : process.env.JWT_ACCESS_EXPIRES_IN || "1d";
-  return jwt.sign(
-    { sub: user._id.toString(), role: user.role, tier: user.tier },
-    process.env.JWT_SECRET,
-    { expiresIn },
-  );
+  const payload = { sub: user._id.toString(), role: user.role };
+  if (user.role !== "admin") {
+    payload.tier = user.tier;
+  }
+  return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
 }
 
 // POST /api/auth/register
@@ -65,7 +65,7 @@ router.post(
           name: user.name,
           email: user.email,
           role: user.role,
-          tier: user.tier,
+          tier: user.role !== "admin" ? user.tier : undefined,
         },
       });
     } catch (err) {
@@ -101,7 +101,7 @@ router.post(
           name: user.name,
           email: user.email,
           role: user.role,
-          tier: user.tier,
+          tier: user.role !== "admin" ? user.tier : undefined,
         },
       });
     } catch (err) {
@@ -117,7 +117,7 @@ router.get("/me", requireAuth, attachUser, (req, res) => {
     name: req.user.name,
     email: req.user.email,
     role: req.user.role,
-    tier: req.user.tier,
+    tier: req.user.role !== "admin" ? req.user.tier : undefined,
   });
 });
 
@@ -132,7 +132,7 @@ router.post("/refresh-token-claims", requireAuth, attachUser, (req, res) => {
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
-      tier: req.user.tier,
+      tier: req.user.role !== "admin" ? req.user.tier : undefined,
     },
   });
 });
