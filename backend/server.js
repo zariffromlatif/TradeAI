@@ -113,7 +113,7 @@ app.use((err, req, res, _next) => {
 });
 
 // Start Server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 initRealtime(server);
 initReportWorker();
 initReportMaintenance();

@@ -5,6 +5,7 @@ const CountrySchema = new mongoose.Schema(
     name: { type: String, required: true },
     code: { type: String, required: true, unique: true }, // e.g. "BD", "IN"
     region: { type: String },
+    GDP: { type: Number }, // GDP in billions (used for some calculations)
     gdpGrowthRate: { type: Number }, // annual GDP growth percentage
     inflation: { type: Number }, // inflation rate percentage
     unemployment: { type: Number }, // unemployment rate percentage

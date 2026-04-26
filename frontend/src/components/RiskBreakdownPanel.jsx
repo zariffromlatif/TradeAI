@@ -229,6 +229,9 @@ export default function RiskBreakdownPanel() {
 
       if (!res.ok) { const e = await res.json(); throw new Error(e.detail || e.message || "Request failed"); }
       const data = await res.json();
+      console.log("📊 API Response from breakdown endpoint:", data);
+      console.log("🔍 dimension_scores:", data.dimension_scores);
+      console.log("🔍 indicator_breakdown:", data.indicator_breakdown);
       setResult(data);
       setActiveTab("indicators");
     } catch (err) {
@@ -250,7 +253,7 @@ export default function RiskBreakdownPanel() {
     : [];
 
   const dimensionData = result
-    ? Object.entries(result.dimension_scores).map(([key, score]) => ({
+    ? Object.entries(result.dimension_scores || result.dimension || {}).map(([key, score]) => ({
         key, label: DIMENSION_LABELS[key], score,
         weight: DIMENSION_WEIGHTS_DISPLAY[key],
         level: score < 25 ? "LOW" : score < 50 ? "MODERATE" : score < 75 ? "HIGH" : "CRITICAL",

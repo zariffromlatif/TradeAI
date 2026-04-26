@@ -148,9 +148,12 @@ const INDICATOR_LABELS = {
 export default function RiskScorePanel() {
   // NEW: State to hold the database countries
   const [countries, setCountries] = useState([]);
+  // NEW: State to hold commodities
+  const [commodities, setCommodities] = useState([]);
 
   const [countryCode, setCountryCode] = useState("");
   const [countryName, setCountryName] = useState("");
+  const [commodityId, setCommodityId] = useState("");
   const [indicators, setIndicators] = useState(DEFAULT_INDICATORS);
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
@@ -168,6 +171,14 @@ export default function RiskScorePanel() {
         setCountries(validCountries);
       })
       .catch((err) => console.error("Failed to load countries:", err));
+
+    // NEW: Fetch commodities
+    fetch(`${API_BASE_URL}/commodities`)
+      .then((res) => res.json())
+      .then((data) => {
+        setCommodities(data);
+      })
+      .catch((err) => console.error("Failed to load commodities:", err));
   }, []);
 
   // NEW: Synchronized dropdown handler
@@ -185,6 +196,12 @@ export default function RiskScorePanel() {
       setCountryCode(selectedObj.code);
       setCountryName(selectedObj.name);
     }
+  };
+
+  // NEW: Commodity selection handler
+  const handleCommoditySelect = (e) => {
+    const selectedId = e.target.value;
+    setCommodityId(selectedId);
   };
 
   const handleIndicatorChange = (field, value) => {
@@ -208,19 +225,40 @@ export default function RiskScorePanel() {
     });
 
     try {
-      const res = await fetch(`${API_BASE}/risk-score`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          country_code: countryCode.toUpperCase(),
-          country_name: countryName,
-          indicators: cleanedIndicators,
-        }),
-      });
+      // ✅ NEW: If commodity is selected, use combined risk score
+      fetch("http://localhost:5001/api/commodities")
+      .then(r => r.json())
+      .then(d => {
+          console.log("Commodities:", d);
+          console.log("Count:", d.length);
+     });
+
+      let res;
+      if (commodityId) {
+        // Combined Risk Score = (Country Risk × 0.60) + (Commodity Risk × 0.40)
+        res = await fetch(`${API_BASE}/combined-risk/${countryCode.toUpperCase()}/${commodityId}`);
+      } else {
+        // No commodity → use country risk only
+        if (Object.keys(cleanedIndicators).length === 0) {
+          // No manual indicators → fetch from database automatically
+          res = await fetch(`${API_BASE}/risk/${countryCode.toUpperCase()}`);
+        } else {
+          // Manual indicators provided → use POST endpoint
+          res = await fetch(`${API_BASE}/risk-score`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              country_code: countryCode.toUpperCase(),
+              country_name: countryName,
+              indicators: cleanedIndicators,
+            }),
+          });
+        }
+      }
       const data = await res.json();
       console.log("API response:", data);
       if (!res.ok) {
-        throw new Error(data.detail || "Request failed");
+        throw new Error(data.detail || data.message || "Request failed");
       }
       setResult(data);
       setActiveTab("overview");
@@ -248,10 +286,10 @@ export default function RiskScorePanel() {
   // Prepare Recharts data
   const radarData = result
     ? [
-        { dim: "Economic", score: result.economic_stability_score },
-        { dim: "Trade", score: result.trade_stability_score },
-        { dim: "Fiscal", score: result.fiscal_health_score },
-        { dim: "Market", score: result.market_volatility_score },
+        { dim: "Economic", score: result.economic_stability_score || result.dimension_scores?.economic_stability || 0 },
+        { dim: "Trade", score: result.trade_stability_score || result.dimension_scores?.trade_stability || 0 },
+        { dim: "Fiscal", score: result.fiscal_health_score || result.dimension_scores?.fiscal_health || 0 },
+        { dim: "Market", score: result.market_volatility_score || result.dimension_scores?.market_volatility || 0 },
       ]
     : [];
 
@@ -318,9 +356,28 @@ export default function RiskScorePanel() {
             </div>
           </div>
 
+          {/* NEW: Commodity Selection */}
+          <div className="mb-5">
+            <label className="text-xs text-neutral-500 mb-1 block">
+              Commodity (Optional)
+            </label>
+            <select
+              value={commodityId}
+              onChange={handleCommoditySelect}
+              className="w-full bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 text-sm focus:outline-none focus:border-[#8ab4ff]"
+            >
+              <option value="">No Commodity</option>
+              {commodities.map((c) => (
+                <option key={c._id} value={c._id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <p className="text-xs text-neutral-500 mb-3">
             Macroeconomic indicators — leave blank to auto-fetch from WorldBank
-            API.
+            API. Commodity selection is optional for commodity-specific risk analysis.
           </p>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -370,8 +427,14 @@ export default function RiskScorePanel() {
                 <div className="flex-1">
                   <div className="text-2xl font-semibold text-neutral-100 mb-1">
                     {result.country_name}
+                    {result.commodity_name && (
+                      <span className="text-[#8ab4ff]"> + {result.commodity_name}</span>
+                    )}
                     <span className="text-neutral-500 text-sm ml-2">
                       ({result.country_code})
+                      {result.commodity_code && (
+                        <span className="text-neutral-400 ml-1">{result.commodity_code}</span>
+                      )}
                     </span>
                   </div>
                   <ScoreBadge
@@ -383,19 +446,19 @@ export default function RiskScorePanel() {
                     {[
                       {
                         label: "Economic Stability",
-                        val: result.economic_stability_score,
+                        val: result.economic_stability_score || result.dimension_scores?.economic_stability,
                       },
                       {
                         label: "Trade Stability",
-                        val: result.trade_stability_score,
+                        val: result.trade_stability_score || result.dimension_scores?.trade_stability,
                       },
                       {
                         label: "Fiscal Health",
-                        val: result.fiscal_health_score,
+                        val: result.fiscal_health_score || result.dimension_scores?.fiscal_health,
                       },
                       {
                         label: "Market Volatility",
-                        val: result.market_volatility_score,
+                        val: result.market_volatility_score || result.dimension_scores?.market_volatility,
                       },
                     ].map(({ label, val }) => (
                       <div
@@ -404,11 +467,29 @@ export default function RiskScorePanel() {
                       >
                         <div className="text-neutral-400 text-xs">{label}</div>
                         <div className="text-neutral-100 font-semibold">
-                          {val.toFixed(1)}
+                          {val ? val.toFixed(1) : "N/A"}
                         </div>
                       </div>
                     ))}
                   </div>
+
+                  {/* ✅ NEW: Show Combined Risk Breakdown if commodity selected */}
+                  {result.country_risk_score && result.commodity_risk_score && (
+                    <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+                      <div className="bg-[#171717] rounded-xl px-3 py-2 border border-[#8ab4ff]/30">
+                        <div className="text-neutral-400 text-xs">Country Risk</div>
+                        <div className="text-neutral-100 font-semibold">
+                          {result.country_risk_score.toFixed(1)} (60%)
+                        </div>
+                      </div>
+                      <div className="bg-[#171717] rounded-xl px-3 py-2 border border-[#8ab4ff]/30">
+                        <div className="text-neutral-400 text-xs">Commodity Risk</div>
+                        <div className="text-neutral-100 font-semibold">
+                          {result.commodity_risk_score.toFixed(1)} (40%)
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-3 text-xs text-neutral-500">
                     Confidence:{" "}
                     <span className="text-neutral-300">{result.confidence}</span> ·

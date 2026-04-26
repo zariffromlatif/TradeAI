@@ -10,6 +10,7 @@ const Commodity = require("../models/Commodity");
 const FxRate = require("../models/FxRate");
 const Order = require("../models/Order");
 const RiskScore = require("../models/RiskScore");
+const CombinedRiskScore = require("../models/Combinedriskscore");
 const {
   getMonthlyVolumeSeries,
   prepareVolumeSeriesForMl,
@@ -130,26 +131,155 @@ async function buildRiskIndicatorPayload({ country, commodityId = null }) {
       ? (fxVolatilityIndex * 0.7 + commodityVol * 0.3)
       : fxVolatilityIndex ?? commodityVol ?? null;
 
+  // ✅ FIX: Properly calculate GDP growth rate from actual data
+  // Use trade stability as proxy for economic growth if GDP growth not available
+  const gdpGrowthRate = country.gdpGrowthRate 
+    ? safeNum(country.gdpGrowthRate)
+    : tradeStabilityProxy > 60 ? 4.5 : tradeStabilityProxy > 40 ? 2.5 : 0.5;
+
+  // ✅ FIX: Calculate unemployment rate from actual data or anomaly frequency
+  // Higher anomalies = higher instability = approximate higher unemployment
+  const unemploymentRate = country.unemployment 
+    ? safeNum(country.unemployment)
+    : clamp((anomalyCount / Math.max(1, recentRows.length)) * 20, 0, 15);
+
+  // ✅ FIX: Properly use debt-to-GDP from country data
+  const debtToGdpRatio = country.debtToGdp 
+    ? safeNum(country.debtToGdp)
+    : null;
+
+  // ✅ FIX: Calculate foreign reserves proxy
+  // Use partner diversity as proxy for external stability
+  const foreignReservesMonths = country.foreignReserves 
+    ? safeNum(country.foreignReserves)
+    : clamp((partnerSet.size / 50) * 12, 2, 12);
+
+  // ✅ FIX: Calculate current account balance (derived from trade balance if available)
+  const currentAccountBalance = country.currentAccount 
+    ? safeNum(country.currentAccount)
+    : country.tradeBalance && country.GDP ? (country.tradeBalance / country.GDP) * 100 : null;
+
   return {
     country_code: country.code,
     country_name: country.name,
     indicators: {
-      gdp_growth_rate: country.GDP ? clamp((country.GDP % 10) + 1, -5, 10) : null,
+      gdp_growth_rate: gdpGrowthRate,
       inflation_rate: safeNum(country.inflation),
-      unemployment_rate: null,
+      unemployment_rate: unemploymentRate,
       trade_balance_usd: safeNum(country.tradeBalance),
       export_growth_rate: exportGrowthRate,
       import_dependency_ratio: importDependencyRatio,
-      debt_to_gdp_ratio: null,
-      foreign_reserves_months: null,
+      debt_to_gdp_ratio: debtToGdpRatio,
+      foreign_reserves_months: foreignReservesMonths,
       fx_volatility_index: marketVolatilityBlend,
-      current_account_balance_pct: null,
+      current_account_balance_pct: currentAccountBalance,
       // additional proxy data consumed by backend/reporting even if ML model ignores extras
       trade_stability_score_proxy: tradeStabilityProxy,
       anomaly_frequency_proxy: anomalyCount,
       partner_diversity_proxy: partnerSet.size,
     },
   };
+}
+
+// ✅ NEW: Build commodity risk payload for combined scoring
+async function buildCommodityRiskPayload({ country, commodity }) {
+  try {
+    // Get last 24 months of trade data for this country + commodity
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - 24);
+    
+    const tradeData = await TradeRecord.find({
+      reporterCode: country.code,
+      commodityCode: commodity.hs6Code,
+      date: { $gte: cutoffDate },
+    }).sort({ date: 1 });
+
+    // Calculate commodity indicators
+    const prices = tradeData.map(t => t.price).filter(p => p > 0);
+    const volumes = tradeData.map(t => t.volume).filter(v => v > 0);
+    
+    // Price Volatility (std dev / mean)
+    const meanPrice = prices.length ? prices.reduce((a, b) => a + b) / prices.length : 0;
+    const priceVariance = prices.length ? prices.reduce((s, p) => s + Math.pow(p - meanPrice, 2), 0) / prices.length : 0;
+    const priceVolatility = meanPrice ? (Math.sqrt(priceVariance) / meanPrice) * 100 : 0;
+
+    // Demand Volatility (based on volume variance)
+    const meanVolume = volumes.length ? volumes.reduce((a, b) => a + b) / volumes.length : 0;
+    const volumeVariance = volumes.length ? volumes.reduce((s, v) => s + Math.pow(v - meanVolume, 2), 0) / volumes.length : 0;
+    const demandVolatility = meanVolume ? (Math.sqrt(volumeVariance) / meanVolume) * 100 : 0;
+
+    // Supply Concentration (number of suppliers)
+    const suppliers = new Set(tradeData.map(t => t.partnerCode));
+    const supplyConcentration = suppliers.size < 3 ? 85 : suppliers.size < 5 ? 65 : suppliers.size < 10 ? 45 : 25;
+
+    // Supply Shock Risk (based on supplier stability - simplified)
+    const supplyShockRisk = suppliers.size < 2 ? 80 : suppliers.size < 5 ? 60 : 40;
+
+    // Trade Dependency Ratio (commodity imports as % of total imports)
+    const totalImports = await TradeRecord.aggregate([
+      {
+        $match: {
+          reporterCode: country.code,
+          date: { $gte: cutoffDate },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: { $multiply: ["$price", "$volume"] } },
+        },
+      },
+    ]);
+    
+    const commodityImportValue = tradeData.reduce((s, t) => s + (t.price * t.volume), 0);
+    const totalImportValue = totalImports.length ? totalImports[0].total : 1;
+    const tradeDependencyRatio = (commodityImportValue / totalImportValue) * 100;
+
+    // Supply Diversification (inverted - more suppliers = lower risk)
+    const supplyDiversification = Math.min(suppliers.size * 10, 80);
+
+    // Market Liquidity Risk (based on number of transactions)
+    const liquidityRisk = tradeData.length > 100 ? 20 : tradeData.length > 50 ? 40 : 60;
+
+    // Production Capacity Gap (simplified - based on volatility)
+    const capacityGap = Math.min(demandVolatility / 2, 50);
+
+    return {
+      country_code: country.code,
+      country_name: country.name,
+      commodity_code: commodity._id.toString(),
+      commodity_name: commodity.name,
+      indicators: {
+        price_volatility: parseFloat(priceVolatility.toFixed(2)),
+        supply_concentration: parseFloat((supplyConcentration / 100).toFixed(2)),
+        supply_shock_risk: parseFloat(supplyShockRisk.toFixed(2)),
+        demand_volatility: parseFloat(demandVolatility.toFixed(2)),
+        market_liquidity_risk: parseFloat(liquidityRisk.toFixed(2)),
+        production_capacity_gap: parseFloat(capacityGap.toFixed(2)),
+        trade_dependency_ratio: parseFloat(tradeDependencyRatio.toFixed(2)),
+        supply_diversification: parseFloat(supplyDiversification.toFixed(2)),
+      },
+    };
+  } catch (err) {
+    console.error("Error building commodity risk payload:", err);
+    // Return default values if calculation fails
+    return {
+      country_code: country.code,
+      country_name: country.name,
+      commodity_code: commodity._id.toString(),
+      commodity_name: commodity.name,
+      indicators: {
+        price_volatility: 50,
+        supply_concentration: 0.5,
+        supply_shock_risk: 50,
+        demand_volatility: 50,
+        market_liquidity_risk: 50,
+        production_capacity_gap: 50,
+        trade_dependency_ratio: 50,
+        supply_diversification: 50,
+      },
+    };
+  }
 }
 
 // GET /api/analytics/dashboard
@@ -907,6 +1037,156 @@ router.get("/partners/:reporterCode", async (req, res) => {
     });
   } catch (err) {
     return res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ NEW: GET /api/analytics/combined-risk/:country/:commodity
+// Combined Risk Score = (Country Risk × 0.60) + (Commodity Risk × 0.40)
+// Each country gets a different risk score for each commodity
+router.get("/combined-risk/:country/:commodity", async (req, res) => {
+  try {
+    const countryCode = req.params.country.toUpperCase();
+    const commodityId = req.params.commodity;
+
+    // Get country
+    const country = await Country.findOne({ code: countryCode });
+    if (!country)
+      return res.status(404).json({ message: "Country not found" });
+
+    // Get commodity
+    const commodity = await Commodity.findById(commodityId);
+    if (!commodity)
+      return res.status(404).json({ message: "Commodity not found" });
+
+    // Step 1: Get Country Risk Score
+    const countryPayload = await buildRiskIndicatorPayload({ country, commodityId: null });
+    const countryResponse = await axios.post(`${ML_BASE}/api/risk-score`, countryPayload);
+    const countryRisk = countryResponse.data.aggregate_risk_score;
+
+    // Step 2: Get Commodity Risk Score
+    const commodityPayload = await buildCommodityRiskPayload({ country, commodity });
+    const commodityResponse = await axios.post(`${ML_BASE}/api/commodity-risk-score`, commodityPayload);
+    const commodityRisk = commodityResponse.data.aggregate_risk_score;
+
+    // Step 3: Calculate Combined Risk Score
+    // Combined = (Country Risk × 0.60) + (Commodity Risk × 0.40)
+    const combinedRiskScore = (countryRisk * 0.6) + (commodityRisk * 0.4);
+
+    // Determine risk category
+    let riskCategory = "LOW";
+    let riskLabel = "Low Risk";
+    if (combinedRiskScore < 25) {
+      riskCategory = "LOW";
+      riskLabel = "Low Risk";
+    } else if (combinedRiskScore < 50) {
+      riskCategory = "MODERATE";
+      riskLabel = "Moderate Risk";
+    } else if (combinedRiskScore < 75) {
+      riskCategory = "HIGH";
+      riskLabel = "High Risk";
+    } else {
+      riskCategory = "CRITICAL";
+      riskLabel = "Critical Risk";
+    }
+
+    // Save or update combined risk score (use updateOne to avoid duplicate key errors)
+    await CombinedRiskScore.updateOne(
+      { countryCode: country.code, commodityId: commodity._id },
+      {
+        $set: {
+          countryCode: country.code,
+          countryName: country.name,
+          commodityId: commodity._id,
+          commodityName: commodity.name,
+          countryRiskScore: countryRisk,
+          commodityRiskScore: commodityRisk,
+          combinedRiskScore: combinedRiskScore,
+          riskCategory: riskCategory,
+          riskLabel: riskLabel,
+          economicStabilityScore: countryResponse.data.economic_stability_score,
+          tradeStabilityScore: countryResponse.data.trade_stability_score,
+          fiscalHealthScore: countryResponse.data.fiscal_health_score,
+          marketVolatilityScore: countryResponse.data.market_volatility_score,
+          supplyRiskScore: commodityResponse.data.supply_risk_score || 0,
+          marketRiskScore: commodityResponse.data.market_risk_score || 0,
+          structuralRiskScore: commodityResponse.data.structural_risk_score || 0,
+          lastUpdated: new Date(),
+        }
+      },
+      { upsert: true }
+    );
+
+    return res.json({
+      country_code: country.code,
+      country_name: country.name,
+      commodity_id: commodity._id,
+      commodity_name: commodity.name,
+      country_risk_score: parseFloat(countryRisk.toFixed(2)),
+      commodity_risk_score: parseFloat(commodityRisk.toFixed(2)),
+      aggregate_risk_score: parseFloat(combinedRiskScore.toFixed(2)),
+      risk_category: riskCategory,
+      risk_label: riskLabel,
+      risk_breakdown: {
+        country_contribution: parseFloat((countryRisk * 0.6).toFixed(2)),
+        commodity_contribution: parseFloat((commodityRisk * 0.4).toFixed(2)),
+      },
+      dimension_scores: {
+        economic_stability: countryResponse.data.economic_stability_score,
+        trade_stability: countryResponse.data.trade_stability_score,
+        fiscal_health: countryResponse.data.fiscal_health_score,
+        market_volatility: countryResponse.data.market_volatility_score,
+      },
+      commodity_dimensions: {
+        supply_risk: commodityResponse.data.supply_risk_score || 0,
+        market_risk: commodityResponse.data.market_risk_score || 0,
+        structural_risk: commodityResponse.data.structural_risk_score || 0,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// ✅ NEW: Commodity Risk Breakdown Endpoint
+router.get("/commodity-risk/:country/:commodity", async (req, res) => {
+  try {
+    const countryCode = req.params.country.toUpperCase();
+    const commodityId = req.params.commodity;
+
+    // Get country
+    const country = await Country.findOne({ code: countryCode });
+    if (!country)
+      return res.status(404).json({ message: "Country not found" });
+
+    // Get commodity
+    const commodity = await Commodity.findById(commodityId);
+    if (!commodity)
+      return res.status(404).json({ message: "Commodity not found" });
+
+    // Get Commodity Risk Score from ML service
+    const commodityPayload = await buildCommodityRiskPayload({ country, commodity });
+    const commodityResponse = await axios.post(`${ML_BASE}/api/commodity-risk-score`, commodityPayload);
+    
+    return res.json({
+      commodity_code: commodity._id,
+      commodity_name: commodity.name,
+      country_code: country.code,
+      country_name: country.name,
+      aggregate_risk_score: commodityResponse.data.aggregate_risk_score,
+      risk_category: commodityResponse.data.risk_category,
+      risk_label: commodityResponse.data.risk_label,
+      dimension_scores: {
+        supply_risk: commodityResponse.data.supply_risk_score,
+        market_risk: commodityResponse.data.market_risk_score,
+        structural_risk: commodityResponse.data.structural_risk_score,
+      },
+      indicator_breakdown: commodityResponse.data.indicator_breakdown || [],
+      confidence: commodityResponse.data.confidence,
+      computed_at: commodityResponse.data.computed_at,
+    });
+  } catch (err) {
+    console.error("Commodity risk breakdown error:", err);
+    res.status(500).json({ message: err.message || "Failed to compute commodity risk breakdown" });
   }
 });
 
