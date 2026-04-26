@@ -10,17 +10,12 @@ const inputClass =
   "bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 w-full";
 
 function Simulation() {
-  // Set the new 'price' tab as the default open tab
   const [tab, setTab] = useState("price");
 
-  // Fetch commodities from database
   const [commodities, setCommodities] = useState([]);
-
-  // Fetch countires from database
   const [countries, setCountries] = useState([]);
   const [countryId, setCountryId] = useState("");
 
-  // Form States
   const [priceForm, setPriceForm] = useState({
     commodityId: "",
     quantity: "100",
@@ -43,23 +38,23 @@ function Simulation() {
     fxRate: "110",
   });
 
-  // Result States
   const [priceResult, setPriceResult] = useState(null);
   const [profitResult, setProfitResult] = useState(null);
   const [landedResult, setLandedResult] = useState(null);
   const [error, setError] = useState("");
   const { api } = useAuth();
 
+  // THE FIX: We only watch priceResult now. We removed priceForm.quantity 
+  // so it doesn't auto-update the Profit tab when you are just typing.
   useEffect(() => {
     if (priceResult?.estimatedPrice) {
       setProfitForm((f) => ({
         ...f,
         unitCostUsd: priceResult.estimatedPrice,
-        quantity: priceForm.quantity,
+        quantity: priceResult.calculatedQuantity, // Uses the frozen snapshot!
       }));
-      setTab("profit");
     }
-  }, [priceResult, priceForm.quantity]);
+  }, [priceResult]);
 
   useEffect(() => {
   const quantity = Number(profitForm.quantity);
@@ -75,11 +70,9 @@ function Simulation() {
     );
   }, [profitForm.quantity, profitForm.unitCostUsd]);
   
-  // Loading States
   const [loadingProfit, setLoadingProfit] = useState(false);
   const [loadingLanded, setLoadingLanded] = useState(false);
 
-  // Load commodities on mount
   useEffect(() => {
     Promise.all([
       axios.get(`${API}/commodities`),
@@ -100,11 +93,7 @@ function Simulation() {
       .catch((err) => console.error(err));
   }, []);
 
-
-  // Helper to get the currently selected commodity object
   const selectedCommodity = commodities.find(c => c._id === priceForm.commodityId) || null;
-
-  // --- Calculation Functions ---
 
   const runPriceEstimator = async (e) => {
     e.preventDefault();
@@ -122,6 +111,8 @@ function Simulation() {
       return;
     }
 
+    const currentQuantity = Number(priceForm.quantity);
+
     try {
       const res = await axios.get(`${API}/marketplace/price-estimate`, {
         params: {
@@ -130,20 +121,27 @@ function Simulation() {
         },
       });
 
-      setPriceResult(res.data);
+      // THE FIX: We take a snapshot of the math here, when the button is clicked.
+      setPriceResult({
+        ...res.data,
+        calculatedQuantity: currentQuantity,
+        totalCost: res.data.estimatedPrice * currentQuantity
+      });
     } catch (err) {
-      // Fallback to client-side estimate when backend is unavailable
+      // Fallback Math Snapshot
       const countryFactor = countryId ? 1.05 : 1;
+      const estimatedPrice = chosenCommodity.currentPrice * countryFactor;
+      
       setPriceResult({
         commodity: chosenCommodity.name,
         basePrice: chosenCommodity.currentPrice,
-        estimatedPrice: chosenCommodity.currentPrice * countryFactor,
+        estimatedPrice: estimatedPrice,
+        calculatedQuantity: currentQuantity,
+        totalCost: estimatedPrice * currentQuantity
       });
       setError("");
     }
   };
-
-  
 
   const runProfitability = async (e) => {
     e.preventDefault();
@@ -199,8 +197,6 @@ function Simulation() {
     }
   };
 
-  // --- UI Components ---
-
   const tabBtn = (id, label) => (
     <button
       type="button"
@@ -231,7 +227,6 @@ function Simulation() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {/* New Tab Placed First */}
         {tabBtn("price", "Price Estimator")}
         {tabBtn("profit", "Profitability")}
         {tabBtn("landed", "Landed cost")}
@@ -243,7 +238,7 @@ function Simulation() {
         </div>
       )}
 
-      {/* --- 1. NEW PRICE ESTIMATOR TAB --- */}
+      {/* --- 1. PRICE ESTIMATOR TAB --- */}
       {tab === "price" && (
         <form
           onSubmit={runPriceEstimator}
@@ -262,7 +257,6 @@ function Simulation() {
                 onChange={(e) => setPriceForm({ ...priceForm, commodityId: e.target.value })}
                 required
               >
-                {/* FIX: Add fallback if array is empty */}
                 {commodities.length === 0 && <option value="">No priced commodities available</option>}
                 {commodities.map(c => (
                   <option key={c._id} value={c._id}>{c.name}</option>
@@ -321,10 +315,14 @@ function Simulation() {
                 <dt>Commodity</dt>
                 <dd className="text-right text-neutral-100">{priceResult.commodity}</dd>
                 <dt>Total Volume</dt>
-                <dd className="text-right">{Number(priceForm.quantity).toLocaleString()} {selectedCommodity?.unit}</dd>
+                <dd className="text-right">
+                  {/* THE FIX: We use the frozen snapshot quantity here! */}
+                  {priceResult.calculatedQuantity.toLocaleString()} {selectedCommodity?.unit}
+                </dd>
                 <dt className="text-[#8ab4ff] mt-2">Total Base Cost (USD)</dt>
                 <dd className="text-right text-[#8ab4ff] font-medium mt-2 text-lg">
-                  ${(priceResult.estimatedPrice * Number(priceForm.quantity)).toLocaleString()}
+                  {/* THE FIX: We use the frozen math snapshot here! */}
+                  ${priceResult.totalCost.toLocaleString()}
                 </dd>
               </dl>
             </div>
@@ -541,6 +539,6 @@ function Simulation() {
       )}
     </div>
   );
+}
 
-};
 export default Simulation;
