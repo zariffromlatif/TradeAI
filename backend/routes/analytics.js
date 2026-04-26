@@ -10,7 +10,7 @@ const Commodity = require("../models/Commodity");
 const FxRate = require("../models/FxRate");
 const Order = require("../models/Order");
 const RiskScore = require("../models/RiskScore");
-const CombinedRiskScore = require("../models/Combinedriskscore");
+const CombinedRiskScore = require("../models/CombinedRiskScore");
 const {
   getMonthlyVolumeSeries,
   prepareVolumeSeriesForMl,
@@ -189,18 +189,23 @@ async function buildCommodityRiskPayload({ country, commodity }) {
     cutoffDate.setMonth(cutoffDate.getMonth() - 24);
     
     const tradeData = await TradeRecord.find({
-      reporterCode: country.code,
-      commodityCode: commodity.hs6Code,
+      reporter: country._id,
+      commodity: commodity._id,
       date: { $gte: cutoffDate },
     }).sort({ date: 1 });
 
     // Calculate commodity indicators
-    const prices = tradeData.map(t => t.price).filter(p => p > 0);
-    const volumes = tradeData.map(t => t.volume).filter(v => v > 0);
+    // Note: TradeRecord stores value (total trade value) and volume
+    // We'll use volume for volatility calculations
+    const volumes = tradeData.map(t => t.volume).filter(v => v && v > 0);
+    const values = tradeData.map(t => t.value).filter(v => v && v > 0);
     
-    // Price Volatility (std dev / mean)
-    const meanPrice = prices.length ? prices.reduce((a, b) => a + b) / prices.length : 0;
-    const priceVariance = prices.length ? prices.reduce((s, p) => s + Math.pow(p - meanPrice, 2), 0) / prices.length : 0;
+    // Price Volatility (use value/volume to estimate price, then calc volatility)
+    const estimatedPrices = tradeData
+      .map(t => t.volume && t.value ? t.value / t.volume : null)
+      .filter(p => p && p > 0);
+    const meanPrice = estimatedPrices.length ? estimatedPrices.reduce((a, b) => a + b) / estimatedPrices.length : 0;
+    const priceVariance = estimatedPrices.length ? estimatedPrices.reduce((s, p) => s + Math.pow(p - meanPrice, 2), 0) / estimatedPrices.length : 0;
     const priceVolatility = meanPrice ? (Math.sqrt(priceVariance) / meanPrice) * 100 : 0;
 
     // Demand Volatility (based on volume variance)
@@ -219,19 +224,19 @@ async function buildCommodityRiskPayload({ country, commodity }) {
     const totalImports = await TradeRecord.aggregate([
       {
         $match: {
-          reporterCode: country.code,
+          reporter: country._id,
           date: { $gte: cutoffDate },
         },
       },
       {
         $group: {
           _id: null,
-          total: { $sum: { $multiply: ["$price", "$volume"] } },
+          total: { $sum: "$value" },
         },
       },
     ]);
     
-    const commodityImportValue = tradeData.reduce((s, t) => s + (t.price * t.volume), 0);
+    const commodityImportValue = tradeData.reduce((s, t) => s + (t.value || 0), 0);
     const totalImportValue = totalImports.length ? totalImports[0].total : 1;
     const tradeDependencyRatio = (commodityImportValue / totalImportValue) * 100;
 
