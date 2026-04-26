@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
+const { tierRank } = require("../services/tier");
 
 function requireAuth(req, res, next) {
   const header = req.headers.authorization;
@@ -46,4 +47,23 @@ async function attachUser(req, res, next) {
   }
 }
 
-module.exports = { requireAuth, requireAdmin, requireRole, attachUser };
+/** Require JWT tier at least `minTier` (silver | gold | diamond). */
+function requireMinTier(minTier) {
+  return (req, res, next) => {
+    const t = req.auth?.tier;
+    if (!t || tierRank(t) < tierRank(minTier)) {
+      return res.status(403).json({
+        message: `This action requires tier ${minTier} or higher.`,
+      });
+    }
+    next();
+  };
+}
+
+module.exports = {
+  requireAuth,
+  requireAdmin,
+  requireRole,
+  attachUser,
+  requireMinTier,
+};

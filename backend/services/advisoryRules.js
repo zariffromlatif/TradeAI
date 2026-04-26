@@ -100,4 +100,105 @@ function buildRecommendations(s) {
   return out;
 }
 
-module.exports = { buildRecommendations, logReturnSampleStd };
+function monthName(i) {
+  const labels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return labels[i] || `M${i + 1}`;
+}
+
+function buildAdvancedAdvisory({
+  signals,
+  commodityName,
+  monthlyCommodityPrices = [],
+  countryRiskUniverse = [],
+  fxVolatility = null,
+}) {
+  const recommendations = [];
+
+  // 1) Optimal execution window based on monthly average commodity prices.
+  if (monthlyCommodityPrices.length >= 4) {
+    const sorted = [...monthlyCommodityPrices].sort((a, b) => a.avgPrice - b.avgPrice);
+    const bestTwo = sorted.slice(0, 2).sort((a, b) => a.month - b.month);
+    const worst = sorted[sorted.length - 1];
+    const savingsPct =
+      worst?.avgPrice > 0
+        ? ((worst.avgPrice - bestTwo[0].avgPrice) / worst.avgPrice) * 100
+        : null;
+    recommendations.push({
+      id: "optimal_execution_window",
+      type: "execution_window",
+      severity: "medium",
+      title: "Optimal execution window",
+      detail: `Based on monthly seasonal averages, ${commodityName || "selected commodity"} is usually cheaper in ${monthName(bestTwo[0].month)}-${monthName(bestTwo[1].month)}${savingsPct != null ? ` (up to ${savingsPct.toFixed(1)}% below yearly peak months)` : ""}.`,
+      confidence: monthlyCommodityPrices.length >= 8 ? "HIGH" : "MEDIUM",
+    });
+  }
+
+  // 2) Alternative market routing from risk universe.
+  if (countryRiskUniverse.length >= 2 && signals?.riskScore != null) {
+    const alternatives = countryRiskUniverse
+      .filter((x) => x.riskScore < signals.riskScore)
+      .sort((a, b) => a.riskScore - b.riskScore)
+      .slice(0, 2);
+    if (alternatives.length > 0) {
+      recommendations.push({
+        id: "alternative_market_routing",
+        type: "alternative_routing",
+        severity: alternatives[0].riskScore <= 40 ? "low" : "medium",
+        title: "Alternative market routing",
+        detail: `${alternatives.map((a) => `${a.countryName} (risk ${a.riskScore.toFixed(1)})`).join(", ")} show lower current risk than the selected market (risk ${signals.riskScore.toFixed(1)}). Consider routing/source diversification.`,
+        confidence: countryRiskUniverse.length >= 6 ? "HIGH" : "MEDIUM",
+      });
+    }
+  }
+
+  // 3) FX timing advice from volatility metric.
+  if (fxVolatility != null) {
+    const lowBand = 0.012;
+    const highBand = 0.025;
+    if (fxVolatility <= lowBand) {
+      recommendations.push({
+        id: "fx_timing_low_vol",
+        type: "fx_timing",
+        severity: "low",
+        title: "FX conversion window favorable",
+        detail: `Forecast FX volatility is currently low (${fxVolatility.toFixed(4)}). Near-term conversion/settlement windows are relatively stable.`,
+        confidence: "MEDIUM",
+      });
+    } else if (fxVolatility >= highBand) {
+      recommendations.push({
+        id: "fx_timing_high_vol",
+        type: "fx_timing",
+        severity: "high",
+        title: "FX timing risk elevated",
+        detail: `Forecast FX volatility is elevated (${fxVolatility.toFixed(4)}). Consider phased conversions, hedging, or shorter quote validity windows.`,
+        confidence: "MEDIUM",
+      });
+    } else {
+      recommendations.push({
+        id: "fx_timing_neutral",
+        type: "fx_timing",
+        severity: "medium",
+        title: "FX timing neutral",
+        detail: `Forecast FX volatility (${fxVolatility.toFixed(4)}) is moderate. Use standard hedging controls and monitor threshold alerts.`,
+        confidence: "MEDIUM",
+      });
+    }
+  }
+
+  return recommendations;
+}
+
+module.exports = { buildRecommendations, logReturnSampleStd, buildAdvancedAdvisory };

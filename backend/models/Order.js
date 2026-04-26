@@ -18,8 +18,17 @@ const OrderSchema = new mongoose.Schema(
     totalValue: { type: Number, required: true },
     status: {
       type: String,
-      enum: ["pending", "active", "completed", "cancelled"],
-      default: "pending",
+      enum: [
+        "draft",
+        "submitted",
+        "payment_pending",
+        "confirmed",
+        "in_transit",
+        "delivered",
+        "settled",
+        "cancelled",
+      ],
+      default: "draft",
     },
     source: {
       type: String,
@@ -62,6 +71,23 @@ const OrderSchema = new mongoose.Schema(
     notes: { type: String },
     isAnomaly: { type: Boolean, default: false },
     anomalyReason: { type: String, default: "" },
+    anomalyStage: {
+      type: String,
+      enum: ["none", "rule", "ml", "both"],
+      default: "none",
+    },
+    anomalyStatus: {
+      type: String,
+      enum: ["open", "dismissed", "escalated"],
+      default: "open",
+    },
+    anomalyReviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    anomalyReviewedAt: { type: Date, default: null },
+    anomalyReviewNote: { type: String, default: "" },
   },
   { timestamps: true },
 );

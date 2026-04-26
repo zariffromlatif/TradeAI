@@ -12,7 +12,7 @@ function signToken(user, rememberMe = false) {
     ? process.env.JWT_REMEMBER_EXPIRES_IN || "14d"
     : process.env.JWT_ACCESS_EXPIRES_IN || "1d";
   return jwt.sign(
-    { sub: user._id.toString(), role: user.role },
+    { sub: user._id.toString(), role: user.role, tier: user.tier },
     process.env.JWT_SECRET,
     { expiresIn },
   );
@@ -118,6 +118,22 @@ router.get("/me", requireAuth, attachUser, (req, res) => {
     email: req.user.email,
     role: req.user.role,
     tier: req.user.tier,
+  });
+});
+
+// POST /api/auth/refresh-token-claims
+// Re-issues access token with latest role/tier claims from DB.
+router.post("/refresh-token-claims", requireAuth, attachUser, (req, res) => {
+  const token = signToken(req.user, false);
+  res.json({
+    token,
+    user: {
+      id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      role: req.user.role,
+      tier: req.user.tier,
+    },
   });
 });
 

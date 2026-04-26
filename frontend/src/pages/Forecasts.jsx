@@ -12,10 +12,14 @@ import {
 } from "recharts";
 import { LineChart as LineChartIcon, Activity } from "lucide-react";
 import { API_BASE_URL } from "../config/api";
+import { useAuth } from "../context/AuthContext";
+import { maxForecastHorizon } from "../config/tiers";
 
 const API = API_BASE_URL;
 
 function Forecasts() {
+  const { token, user } = useAuth();
+  const authHeaders = token ? { Authorization: `Bearer ${token}` } : {};
   const [commodities, setCommodities] = useState([]);
   const [countries, setCountries] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +35,15 @@ function Forecasts() {
 
   const [volumeResult, setVolumeResult] = useState(null);
   const [volResult, setVolResult] = useState(null);
+
+  const horizonCap = maxForecastHorizon(user?.tier);
+
+  useEffect(() => {
+    const n = Number(horizon);
+    if (Number.isFinite(n) && n > horizonCap) {
+      setHorizon(String(horizonCap));
+    }
+  }, [horizonCap, horizon]);
 
   useEffect(() => {
     setLoading(true);
@@ -58,6 +71,10 @@ function Forecasts() {
 
   const runForecast = async (e) => {
     e.preventDefault();
+    if (!token) {
+      setError("Sign in to run forecasts (tier limits apply).");
+      return;
+    }
     if (!commodity) {
       setError("Select a commodity.");
       return;
@@ -76,8 +93,8 @@ function Forecasts() {
 
     try {
       const [vRes, pRes] = await Promise.all([
-        axios.post(`${API}/analytics/forecast/volume`, bodyVol),
-        axios.post(`${API}/analytics/forecast/price-volatility`, { fxPair }),
+        axios.post(`${API}/analytics/forecast/volume`, bodyVol, { headers: authHeaders }),
+        axios.post(`${API}/analytics/forecast/price-volatility`, { fxPair }, { headers: authHeaders }),
       ]);
       setVolumeResult(vRes.data);
       setVolResult(pRes.data);
@@ -212,15 +229,20 @@ function Forecasts() {
           </select>
         </label>
         <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-400">Forecast horizon (months)</span>
+          <span className="text-neutral-400">
+            Forecast horizon (months, max {horizonCap} on your plan)
+          </span>
           <input
             type="number"
             min={1}
-            max={12}
+            max={horizonCap}
             value={horizon}
             onChange={(e) => setHorizon(e.target.value)}
             className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
           />
+          <span className="text-neutral-600 text-xs">
+            Silver: up to 3 · Gold: up to 9 · Diamond: up to 12. Upgrade on Plans.
+          </span>
         </label>
         <div className="flex items-end sm:col-span-2 lg:col-span-5">
           <button
@@ -256,6 +278,13 @@ function Forecasts() {
           )}
           {volumeResult.expansionNote && (
             <p className="text-neutral-500 text-xs mt-1">{volumeResult.expansionNote}</p>
+          )}
+          {volumeResult.tierLimits?.capped && (
+            <p className="text-amber-300/90 text-xs mt-1">
+              Horizon capped by your plan: requested {volumeResult.tierLimits.requestedHorizonMonths}
+              mo, applied {volumeResult.tierLimits.appliedHorizonMonths} mo (max{" "}
+              {volumeResult.tierLimits.maxHorizonMonths} for {volumeResult.tierLimits.tier}).
+            </p>
           )}
           {volumeResult.metrics && (
             <p className="text-neutral-500 text-xs mt-1">

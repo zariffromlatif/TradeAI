@@ -1,8 +1,10 @@
 import { Link, useLocation } from "react-router-dom";
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { io } from "socket.io-client";
 import { useAuth } from "../context/AuthContext";
 import { API_BASE_URL } from "../config/api";
+import { tierLabel } from "../config/tiers";
 import {
   BarChart2, TrendingUp, GitCompare, Bell, Package, Shield,
   ClipboardList, Sparkles, Calculator, LineChart as LineChartIcon,
@@ -14,7 +16,7 @@ const API = API_BASE_URL;
 
 function Navbar() {
   const location = useLocation();
-  const { user, logout } = useAuth(); 
+  const { user, token, logout } = useAuth(); 
   const [hasAnomalies, setHasAnomalies] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -23,6 +25,7 @@ function Navbar() {
   const publicLinks = [
     { to: "/dashboard", label: "Dashboard", icon: <BarChart2 size={16} /> },
     { to: "/commodities", label: "Commodities", icon: <TrendingUp size={16} /> },
+    { to: "/trade-balance", label: "Balance", icon: <Activity size={16} /> },
   ];
 
   const privateLinks = [
@@ -31,14 +34,22 @@ function Navbar() {
     { to: "/advisory", label: "Advisory", icon: <Lightbulb size={16} /> },
     { to: "/sim", label: "Simulate", icon: <Calculator size={16} /> },
     { to: "/orders", label: "Marketplace", icon: <Package size={16} /> },
+    { to: "/payment-requests", label: "Payments", icon: <Sparkles size={16} /> },
   ];
 
   const moreLinks = [
     { to: "/risk", label: "Risk score", icon: <Shield size={16} /> },
     { to: "/risk/breakdown", label: "Risk explain", icon: <ClipboardList size={16} /> },
     { to: "/sensitivity", label: "Stress Test", icon: <Activity size={16} /> },
-    { to: "/premium", label: "Premium", icon: <Sparkles size={16} /> },
+    { to: "/plans", label: "Plans", icon: <Sparkles size={16} /> },
+    { to: "/admin", label: "Admin", icon: <ShieldCheck size={16} /> },
   ];
+  const filteredMoreLinks = moreLinks.filter(
+    (link) => link.to !== "/admin" || user?.role === "admin",
+  );
+
+  const plansPaths = ["/plans", "/premium"];
+  const isPlansRoute = () => plansPaths.includes(location.pathname);
 
   const displayLinks = user ? [...publicLinks, ...privateLinks] : publicLinks;
 
@@ -47,8 +58,21 @@ function Navbar() {
 
     const checkAnomalies = async () => {
       try {
-        const res = await axios.get(`${API}/orders/anomalies`);
-        setHasAnomalies(res.data.length > 0);
+        const [anomalyRes, riskRes] = await Promise.all([
+          axios.get(`${API}/orders/anomalies`),
+          axios.get(`${API}/risk-alerts/active`, {
+            headers: user ? { Authorization: `Bearer ${localStorage.getItem("tradeai_token")}` } : {},
+          }),
+        ]);
+        const notifRes = await axios.get(`${API}/notifications/mine`, {
+          headers: user ? { Authorization: `Bearer ${localStorage.getItem("tradeai_token")}` } : {},
+        });
+        const unread = (notifRes.data || []).filter((n) => !n.read).length;
+        setHasAnomalies(
+          (anomalyRes.data?.length || 0) > 0 ||
+            (riskRes.data?.length || 0) > 0 ||
+            unread > 0,
+        );
       } catch (err) {
         console.error("Failed to fetch anomalies:", err);
       }
@@ -58,6 +82,29 @@ function Navbar() {
     const intervalId = setInterval(checkAnomalies, 30000);
     return () => clearInterval(intervalId);
   }, [user]);
+
+  useEffect(() => {
+    if (!user || !token) return undefined;
+    const socketBase = API_BASE_URL.replace(/\/api$/, "");
+    const socket = io(socketBase, {
+      transports: ["websocket"],
+      auth: { token },
+    });
+    const onAnyAlert = () => setHasAnomalies(true);
+    socket.on("payment_status_change", onAnyAlert);
+    socket.on("order_anomaly_review", onAnyAlert);
+    socket.on("risk_alerts_created", onAnyAlert);
+    socket.on("thresholds_updated", onAnyAlert);
+    socket.on("order_transitioned", onAnyAlert);
+    return () => {
+      socket.off("payment_status_change", onAnyAlert);
+      socket.off("order_anomaly_review", onAnyAlert);
+      socket.off("risk_alerts_created", onAnyAlert);
+      socket.off("thresholds_updated", onAnyAlert);
+      socket.off("order_transitioned", onAnyAlert);
+      socket.disconnect();
+    };
+  }, [user, token]);
 
   useEffect(() => {
     const handler = (e) => {
@@ -99,7 +146,11 @@ function Navbar() {
                 <button
                   onClick={() => setShowMoreMenu(!showMoreMenu)}
                   className={`flex items-center gap-1.5 text-sm font-medium transition-colors ${
-                    moreLinks.some(link => location.pathname === link.to)
+                    moreLinks.some(
+                      (link) =>
+                        location.pathname === link.to ||
+                        (link.to === "/plans" && isPlansRoute()),
+                    )
                       ? "text-[#8ab4ff]"
                       : "text-neutral-400 hover:text-neutral-100"
                   }`}
@@ -111,13 +162,14 @@ function Navbar() {
 
                 {showMoreMenu && (
                   <div className="absolute top-full left-0 mt-4 w-48 bg-[#121212] border border-[#2a2a2a] rounded-xl shadow-2xl py-2 z-50">
-                    {moreLinks.map((link) => (
+                    {filteredMoreLinks.map((link) => (
                       <Link
                         key={link.to}
                         to={link.to}
                         onClick={() => setShowMoreMenu(false)}
                         className={`flex items-center gap-3 px-4 py-2 text-sm transition-colors ${
-                          location.pathname === link.to
+                          location.pathname === link.to ||
+                          (link.to === "/plans" && isPlansRoute())
                             ? "text-[#8ab4ff] bg-[#1a1a1a]"
                             : "text-neutral-300 hover:text-neutral-100 hover:bg-[#1a1a1a]"
                         }`}
@@ -165,6 +217,11 @@ function Navbar() {
                   </div>
                   <div className="hidden sm:flex flex-col items-start text-left">
                     <span className="text-sm font-medium text-neutral-200 leading-tight">{user?.name || "User"}</span>
+                    {user?.tier && (
+                      <span className="text-[10px] text-amber-200/90 font-medium leading-tight">
+                        {tierLabel(user.tier)}
+                      </span>
+                    )}
                     {user?.role === "admin" && (
                       <span className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 leading-tight">
                         <ShieldCheck size={10} /> Admin
@@ -245,13 +302,14 @@ function Navbar() {
           ))}
 
           <div className="text-xs font-semibold text-neutral-500 uppercase tracking-widest px-3 pt-4">More Tools</div>
-          {moreLinks.map((link) => (
+          {filteredMoreLinks.map((link) => (
             <Link
               key={`mobile-more-${link.to}`}
               to={link.to}
               onClick={() => setIsMobileMenuOpen(false)}
               className={`flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium transition-colors ${
-                location.pathname === link.to
+                location.pathname === link.to ||
+                (link.to === "/plans" && isPlansRoute())
                   ? "bg-[#1a1a1a] text-[#8ab4ff]"
                   : "text-neutral-300 hover:bg-[#1a1a1a]"
               }`}

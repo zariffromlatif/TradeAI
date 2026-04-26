@@ -5,7 +5,10 @@ const Commodity = require("../models/Commodity");
 const {
   buildRecommendations,
   logReturnSampleStd,
+  buildAdvancedAdvisory,
 } = require("../services/advisoryRules");
+const RiskScore = require("../models/RiskScore");
+const FxRate = require("../models/FxRate");
 
 const router = express.Router();
 const ML_BASE = "http://127.0.0.1:8000";
@@ -52,6 +55,7 @@ router.post("/recommend", async (req, res) => {
 
     let priceVolatilityStd = null;
     let commodityName = null;
+    let monthlyCommodityPrices = [];
     if (commodity) {
       const doc = await Commodity.findById(commodity).select("name priceHistory");
       if (doc) {
@@ -60,6 +64,51 @@ router.post("/recommend", async (req, res) => {
           .sort((a, b) => new Date(a.date) - new Date(b.date))
           .map((p) => p.price);
         priceVolatilityStd = logReturnSampleStd(prices);
+        const byMonth = new Map();
+        (doc.priceHistory || []).forEach((p) => {
+          const m = new Date(p.date).getUTCMonth();
+          if (!byMonth.has(m)) byMonth.set(m, []);
+          byMonth.get(m).push(Number(p.price));
+        });
+        monthlyCommodityPrices = Array.from(byMonth.entries()).map(([month, arr]) => ({
+          month,
+          avgPrice: arr.reduce((a, b) => a + b, 0) / arr.length,
+        }));
+      }
+    }
+
+    // Build alternative market routing universe using latest risk snapshots.
+    const latestRiskRows = await RiskScore.aggregate([
+      { $sort: { countryCode: 1, createdAt: -1 } },
+      {
+        $group: {
+          _id: "$countryCode",
+          countryName: { $first: "$countryName" },
+          riskScore: { $first: "$aggregateRiskScore" },
+          createdAt: { $first: "$createdAt" },
+        },
+      },
+      { $sort: { riskScore: 1 } },
+      { $limit: 20 },
+    ]);
+
+    // FX timing signal from latest rates
+    let fxVolatility = null;
+    const fxDoc = await FxRate.findOne({ pair: "USD/BDT" }).select("history").lean();
+    const rates = [...(fxDoc?.history || [])]
+      .sort((a, b) => new Date(a.date) - new Date(b.date))
+      .map((x) => Number(x.rate))
+      .filter((x) => Number.isFinite(x) && x > 0);
+    if (rates.length >= 4) {
+      const logRet = [];
+      for (let i = 1; i < rates.length; i += 1) {
+        logRet.push(Math.log(rates[i] / rates[i - 1]));
+      }
+      if (logRet.length >= 2) {
+        const mean = logRet.reduce((a, b) => a + b, 0) / logRet.length;
+        const variance =
+          logRet.reduce((s, x) => s + (x - mean) ** 2, 0) / (logRet.length - 1);
+        fxVolatility = Math.sqrt(variance);
       }
     }
 
@@ -74,6 +123,17 @@ router.post("/recommend", async (req, res) => {
     };
 
     const recommendations = buildRecommendations(signals);
+    const advancedRecommendations = buildAdvancedAdvisory({
+      signals,
+      commodityName,
+      monthlyCommodityPrices,
+      countryRiskUniverse: latestRiskRows.map((r) => ({
+        countryCode: r._id,
+        countryName: r.countryName,
+        riskScore: Number(r.riskScore),
+      })),
+      fxVolatility,
+    });
 
     res.json({
       country: {
@@ -91,9 +151,20 @@ router.post("/recommend", async (req, res) => {
         commodityName: signals.commodityName,
       },
       recommendations,
+      advancedRecommendations,
+      recommendationGroups: {
+        executionWindow: advancedRecommendations.filter((r) => r.type === "execution_window"),
+        alternativeRouting: advancedRecommendations.filter((r) => r.type === "alternative_routing"),
+        fxTiming: advancedRecommendations.filter((r) => r.type === "fx_timing"),
+      },
+      advisoryInputs: {
+        monthlyCommodityPrices,
+        fxVolatility,
+        routingUniverseSize: latestRiskRows.length,
+      },
       disclaimer:
         "Educational decision-support only — not financial, legal, or investment advice.",
-      engine: "f14-rules-express-v1",
+      engine: "f15-rules-synthesis-v2",
     });
   } catch (err) {
     res.status(500).json({ message: err.message });

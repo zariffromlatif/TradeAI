@@ -1,27 +1,66 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
+import { useAuth } from "../context/AuthContext";
+import { tierLabel } from "../config/tiers";
 
 const API = API_BASE_URL;
 
+const TIERS = [
+  {
+    id: "silver",
+    name: "Silver",
+    blurb: "Included with every account. Core analytics and marketplace access (subject to role).",
+    highlight: false,
+  },
+  {
+    id: "gold",
+    name: "Gold",
+    blurb: "Expanded limits and priority features for growing trade desks.",
+    highlight: true,
+  },
+  {
+    id: "diamond",
+    name: "Diamond",
+    blurb: "Highest tier — full capability where the product defines paid limits.",
+    highlight: true,
+  },
+];
+
 function Premium() {
   const navigate = useNavigate();
-  const [userId, setUserId] = useState("");
+  const { user, token, refreshTokenClaims } = useAuth();
   const [email, setEmail] = useState("");
+  const [checkoutTier, setCheckoutTier] = useState("gold");
+  const [demoTier, setDemoTier] = useState("gold");
   const [error, setError] = useState("");
   const [loadingStripe, setLoadingStripe] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
 
-  const handleCheckout = async (e) => {
+  useEffect(() => {
+    if (!user) return;
+    if (user.email && !email) setEmail(user.email);
+  }, [user, email]);
+
+  const runStripeCheckout = async (e) => {
     e.preventDefault();
     setError("");
+    if (!token) {
+      setError("Please sign in to continue.");
+      return;
+    }
+    if (user?.tier === checkoutTier || (checkoutTier === "gold" && user?.tier === "diamond")) {
+      setError("You already meet or exceed this plan.");
+      return;
+    }
     setLoadingStripe(true);
     try {
-      const res = await axios.post(`${API}/payment/create-session`, {
-        userId,
-        email,
-      });
+      const res = await axios.post(
+        `${API}/payment/create-session`,
+        { tier: checkoutTier, email },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
       if (res.data?.url) {
         window.location.href = res.data.url;
       } else {
@@ -36,13 +75,18 @@ function Premium() {
 
   const handleDemoUpgrade = async () => {
     setError("");
-    if (!userId.trim()) {
-      setError("Enter your MongoDB user ID.");
+    if (!token) {
+      setError("Please sign in to use demo upgrade.");
       return;
     }
     setLoadingDemo(true);
     try {
-      await axios.post(`${API}/payment/demo-upgrade`, { userId: userId.trim() });
+      await axios.post(
+        `${API}/payment/demo-upgrade`,
+        { targetTier: demoTier },
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      await refreshTokenClaims?.();
       navigate("/payment/success");
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Request failed.");
@@ -52,68 +96,115 @@ function Premium() {
   };
 
   return (
-    <div className="max-w-md mx-auto space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Upgrade to Premium</h1>
-      <p className="text-neutral-400 text-sm space-y-2">
-        <span className="block">
-          <strong className="text-neutral-300">Demo:</strong> upgrade without Stripe
-          if <code className="text-[#8ab4ff]">DEMO_PAYMENT=true</code> in{" "}
-          <code className="text-[#8ab4ff]">backend/.env</code> (restart server).
-        </span>
-        <span className="block">
-          <strong className="text-neutral-300">Stripe:</strong> use MongoDB{" "}
-          <code className="text-[#8ab4ff]">users._id</code> and account email.
-          Test card:{" "}
-          <code className="text-[#8ab4ff]">4242 4242 4242 4242</code>.
-        </span>
-      </p>
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Plans</h1>
+        <p className="text-neutral-400 text-sm mt-2 max-w-2xl">
+          <strong className="text-neutral-300">Silver</strong> is the free baseline.
+          <strong className="text-neutral-300"> Gold</strong> and{" "}
+          <strong className="text-neutral-300">Diamond</strong> are paid upgrades.
+          Roles (buyer / seller) still control marketplace actions; tiers control plan limits where enforced.
+        </p>
+        {user?.tier && (
+          <p className="text-sm text-emerald-300 mt-2">
+            Your current plan: <strong>{tierLabel(user.tier)}</strong>
+          </p>
+        )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        {TIERS.map((t) => (
+          <div
+            key={t.id}
+            className={`rounded-2xl border p-5 flex flex-col ${
+              t.highlight
+                ? "border-[#8ab4ff]/40 bg-[#121212]"
+                : "border-[#2a2a2a] bg-[#121212]"
+            }`}
+          >
+            <h2 className="text-lg font-semibold text-neutral-100">{t.name}</h2>
+            <p className="text-neutral-500 text-xs mt-2 flex-1">{t.blurb}</p>
+            {t.id === "silver" && (
+              <p className="text-xs text-neutral-600 mt-4">Default at registration.</p>
+            )}
+          </div>
+        ))}
+      </div>
+
       {error && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
           {error}
         </div>
       )}
-      <form
-        onSubmit={handleCheckout}
-        className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-4"
-      >
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-400">User ID (MongoDB)</span>
-          <input
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
-            placeholder="64a..."
-            required
-          />
-        </label>
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="text-neutral-400">Email</span>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
-            required
-          />
-        </label>
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={handleDemoUpgrade}
-            disabled={loadingStripe || loadingDemo}
-            className="btn-ui btn-secondary w-full"
-          >
-            {loadingDemo ? "Upgrading…" : "Simulate premium (demo)"}
-          </button>
+
+      <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-4">
+        <h3 className="text-sm font-semibold text-neutral-300 uppercase tracking-wider">
+          Pay with Stripe
+        </h3>
+        <p className="text-neutral-500 text-xs">
+          Checkout is tied to your signed-in account. Test card:{" "}
+          <code className="text-[#8ab4ff]">4242 4242 4242 4242</code>.
+        </p>
+        <form onSubmit={runStripeCheckout} className="space-y-4">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-neutral-400">Plan</span>
+            <select
+              value={checkoutTier}
+              onChange={(e) => setCheckoutTier(e.target.value)}
+              className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
+            >
+              <option value="gold">Gold</option>
+              <option value="diamond">Diamond</option>
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-neutral-400">Receipt email</span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100"
+              required
+            />
+          </label>
           <button
             type="submit"
             disabled={loadingStripe || loadingDemo}
             className="btn-ui btn-primary w-full"
           >
-            {loadingStripe ? "Redirecting…" : "Pay with Stripe"}
+            {loadingStripe ? "Redirecting…" : `Continue to checkout (${tierLabel(checkoutTier)})`}
+          </button>
+        </form>
+      </div>
+
+      <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-6 space-y-4">
+        <h3 className="text-sm font-semibold text-neutral-300 uppercase tracking-wider">
+          Demo upgrade (local only)
+        </h3>
+        <p className="text-neutral-500 text-xs">
+          Requires <code className="text-[#8ab4ff]">DEMO_PAYMENT=true</code> in{" "}
+          <code className="text-[#8ab4ff]">backend/.env</code> and a server restart. Upgrades the{" "}
+          <strong>signed-in</strong> user only.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select
+            value={demoTier}
+            onChange={(e) => setDemoTier(e.target.value)}
+            className="bg-[#171717] border border-[#2a2a2a] rounded-xl px-3 py-2 text-neutral-100 flex-1"
+          >
+            <option value="gold">Gold</option>
+            <option value="diamond">Diamond</option>
+          </select>
+          <button
+            type="button"
+            onClick={handleDemoUpgrade}
+            disabled={loadingStripe || loadingDemo}
+            className="btn-ui btn-secondary flex-1"
+          >
+            {loadingDemo ? "Upgrading…" : `Simulate upgrade → ${tierLabel(demoTier)}`}
           </button>
         </div>
-      </form>
+      </div>
     </div>
   );
 }

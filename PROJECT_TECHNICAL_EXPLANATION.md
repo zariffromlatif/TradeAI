@@ -129,6 +129,55 @@ This document describes how the **TradeAI** repository is structured, how the th
 | `POST /api/forecast/price-volatility` | Log returns, sample standard deviation, optional rolling window stats. |
 | `ml-service/requirements.txt` | Pins FastAPI, uvicorn, sklearn, numpy, pydantic, etc. |
 
+### 4.1 Risk score and risk interpretability (end-to-end flow)
+
+Scoring and explainability use the same core function, `run_scoring()`, in `ml-service/main.py`. Express does not re-implement the math; it forwards JSON to FastAPI. The default ML base URL in `backend/routes/analytics.js` is `http://127.0.0.1:8000` (`ML_BASE`).
+
+**Risk score:** `RiskScorePanel.jsx` posts to `POST /api/analytics/risk-score` with a body like `{ country_code, country_name, indicators: { ... } }` (all indicator keys optional; missing values are treated as neutral in `run_scoring`). The response includes `aggregate_risk_score`, per-dimension scores, and `indicator_breakdown`.
+
+**Risk interpretability:** `RiskBreakdownPanel.jsx` posts to `POST /api/analytics/risk/:country/breakdown` with the same shape; the path segment must match `country_code` in the body. The ML route `POST /api/risk/{country_code}/breakdown` returns `dimension_scores`, `dimension_weights`, and `indicator_breakdown` for charts and copy.
+
+**Optional:** `GET /api/analytics/risk/:country` builds a partial payload from the `Country` document in MongoDB and calls `POST /api/risk-score` — convenient when the UI only has an ISO code.
+
+#### Diagram — risk score (`/risk`)
+
+```mermaid
+flowchart LR
+  subgraph UI["frontend/src/components/RiskScorePanel.jsx"]
+    A[Country + optional indicator fields] --> B["POST /api/analytics/risk-score"]
+  end
+  subgraph API["backend/routes/analytics.js"]
+    B --> C[Axios: POST ML_BASE/api/risk-score]
+  end
+  subgraph ML["ml-service/main.py"]
+    C --> D[run_scoring]
+    D --> E[INDICATOR_CONFIG per field: normalize, weight, interpret]
+    E --> F[DIMENSION_WEIGHTS: four dimension scores → aggregate 1–100]
+    F --> G[Response JSON incl. indicator_breakdown]
+  end
+  G --> H[Recharts: radar, bars, interpret tab]
+```
+
+#### Diagram — risk breakdown (`/risk/breakdown`)
+
+```mermaid
+flowchart LR
+  subgraph UI2["frontend/src/components/RiskBreakdownPanel.jsx"]
+    P[Country + optional indicators] --> Q["POST /api/analytics/risk/{code}/breakdown"]
+  end
+  subgraph API2["backend/routes/analytics.js"]
+    Q --> R[Proxy: POST ML /api/risk/{code}/breakdown]
+  end
+  subgraph ML2["ml-service/main.py"]
+    R --> S[URL/body country_code match]
+    S --> T[run_scoring]
+    T --> U[Enriched payload: dimension_scores + dimension_weights + indicator_breakdown]
+  end
+  U --> V[UI: sortable rows, dimension cards, contribution bar chart]
+```
+
+**Batch (other clients):** `POST /api/analytics/risk-score/batch` maps to `POST /api/risk-score/batch` in the ML service (up to 20 countries per request).
+
 ---
 
 ## 5. Frontend — file by file

@@ -6,12 +6,17 @@ dns.setServers(['1.1.1.1', '8.8.8.8']);   // Cloudflare + Google DNS
 require("dotenv").config();
 
 const express = require("express");
+const http = require("http");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
+const { initRealtime } = require("./realtime");
+const { initReportWorker } = require("./workers/reportWorker");
+const { initReportMaintenance } = require("./services/reportMaintenance");
 
 const app = express();
+const server = http.createServer(app);
 const corsOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((origin) => origin.trim())
@@ -62,9 +67,13 @@ const authLimiter = rateLimit({
 });
 
 // MongoDB Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ Connected to MongoDB Atlas"))
-  .catch(err => {
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(async () => {
+    console.log("✅ Connected to MongoDB Atlas");
+    await require("./services/tierMigration").migrateLegacyUserTiers();
+  })
+  .catch((err) => {
     console.error("❌ MongoDB connection failed:", err.message);
     process.exit(1);
   });
@@ -81,6 +90,10 @@ app.use("/api/payment", require("./routes/payment"));
 app.use("/api/sim", require("./routes/simulation"));
 app.use("/api/reports", require("./routes/reports"));
 app.use("/api/advisory", require("./routes/advisory"));
+app.use("/api/payment-requests", require("./routes/paymentRequests"));
+app.use("/api/risk-alerts", require("./routes/riskAlerts"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/notifications", require("./routes/notifications"));
 app.use((err, req, res, _next) => {
   const status = err.statusCode || 500;
   const message = err.message || "Internal Server Error";
@@ -97,7 +110,10 @@ app.use((err, req, res, _next) => {
 });
 
 // Start Server
-const PORT = process.env.PORT || 5001;
-app.listen(PORT, () => {
-  console.log(`🚀 TradeAI Backend Server is running on http://localhost:${PORT}`);
+const PORT = process.env.PORT || 5000;
+initRealtime(server);
+initReportWorker();
+initReportMaintenance();
+server.listen(PORT, () => {
+  console.log(`TradeAI Backend Server is running on http://localhost:${PORT}`);
 });

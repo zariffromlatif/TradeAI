@@ -43,9 +43,24 @@ A **checklist table** for all **16** spec items (Modules 1–4), with **Met / Pa
 ## Payments (Feature 5)
 
 - **Implementation:** This project uses **Stripe** (test mode), not SSLCommerz. If your course spec mentioned SSLCommerz, treat **Stripe** as the chosen gateway for this repository.
-- **Environment:** `STRIPE_SECRET_KEY` is required for **`POST /api/payment/create-session`** (Checkout). `STRIPE_WEBHOOK_SECRET` is required for **`POST /api/payment/webhook`** so `User.tier` can update to `premium` after `checkout.session.completed`.
-- **Demo without Stripe:** Set **`DEMO_PAYMENT=true`** in `backend/.env` (see `.env.example`) to allow **`POST /api/payment/demo-upgrade`** with a MongoDB `userId` — useful for local demos only; **disable in production**.
-- **Frontend:** Premium flow and return URLs — `/premium`, `/payment/success`, `/payment/cancel` (must match `success_url` / `cancel_url` in `backend/routes/payment.js` for your deployed origin).
+- **Tiers:** `User.tier` is **`silver`** (default), **`gold`**, or **`diamond`** (highest). Checkout and webhooks set the purchased tier from session metadata; legacy DB values `free` / `premium` migrate to **silver** / **gold** on server start.
+- **Environment:** `STRIPE_SECRET_KEY` for **`POST /api/payment/create-session`** (body: `tier`: `gold` | `diamond`, `email`; **Bearer required** — upgrades the signed-in user). `STRIPE_WEBHOOK_SECRET` for **`POST /api/payment/webhook`**. Optional: `FRONTEND_PUBLIC_URL`, `STRIPE_GOLD_AMOUNT_CENTS`, `STRIPE_DIAMOND_AMOUNT_CENTS` (see `.env.example`).
+- **Demo without Stripe:** Set **`DEMO_PAYMENT=true`** to allow **`POST /api/payment/demo-upgrade`** with body `{ "targetTier": "gold" | "diamond" }` for the **authenticated** user only; **disable in production**.
+- **Frontend:** Plans UI at **`/plans`** (alias **`/premium`**) and return URLs **`/payment/success`**, **`/payment/cancel`** — must match `success_url` / `cancel_url` (derived from `FRONTEND_PUBLIC_URL` or first `CORS_ORIGINS` entry).
+
+### Tier access (enforced in API)
+
+| Capability | Silver | Gold | Diamond |
+|------------|--------|------|-----------|
+| Dashboard, compare, commodities, trade balance, single-country risk (existing flows) | Yes | Yes | Yes |
+| **Trade volume forecast** max horizon (months) | **3** | **9** | **12** |
+| **FX / commodity volatility** (`POST …/forecast/price-volatility`) | Yes (auth) | Yes | Yes |
+| **PDF trade summary** (`GET /api/reports/trade-summary`) | No | Yes | Yes |
+| **Batch risk** (`POST …/analytics/risk-score/batch`) | No | Yes | Yes |
+| **Optimal bid range** (marketplace) | Yes (auth) | Yes | Yes |
+
+Gated routes need a **Bearer JWT** with a current `tier` claim (use **`/auth/refresh-token-claims`** after an upgrade).
+
 - **Test card:** `4242 4242 4242 4242` (any future expiry, any CVC) in Stripe test mode.
 - **Local webhooks:** Install [Stripe CLI](https://stripe.com/docs/stripe-cli), run `stripe listen --forward-to localhost:5000/api/payment/webhook`, copy the `whsec_...` secret into `STRIPE_WEBHOOK_SECRET`, restart the backend. If signature verification fails, ensure the webhook route receives the **raw** body (ordering of `express.json()` vs. the Stripe route may need adjustment).
 
@@ -110,7 +125,7 @@ TradeAI/
 │   │   ├── Commodity.js            ← price history array
 │   │   ├── TradeRecord.js          ← bilateral trade (reporter + partner)
 │   │   ├── Order.js                ← simulated trade orders (Member D)
-│   │   └── User.js                 ← tier + role (admin/user)
+│   │   └── User.js                 ← tier (silver/gold/diamond) + role (buyer/seller/admin)
 │   └── routes/
 │       ├── auth.js                 ← register, login, me
 │       ├── countries.js            ← CRUD /api/countries
@@ -286,9 +301,9 @@ Dashboard top exporters/importers and country analytics aggregate by **`reporter
 | POST | `/api/analytics/risk-score` | Full risk score (body → ML) |
 | POST | `/api/analytics/risk/:country/breakdown` | Risk interpretability breakdown |
 | GET | `/api/analytics/compare` | Dual-country time series (query: countryA, countryB, type, commodity) |
-| POST | `/api/analytics/risk-score/batch` | Batch risk scores (proxy to ML) |
-| POST | `/api/analytics/forecast/volume` | F7 trade-volume forecast (`commodity`, optional `country`, `type`, `horizon`) — **requires ML** |
-| POST | `/api/analytics/forecast/price-volatility` | F7 log-return volatility from real FX history (`fxPair`) — **requires ML** |
+| POST | `/api/analytics/risk-score/batch` | Batch risk scores — **Bearer + Gold+**; proxy to ML |
+| POST | `/api/analytics/forecast/volume` | F7 trade-volume forecast — **Bearer**; horizon capped by tier; **requires ML** |
+| POST | `/api/analytics/forecast/price-volatility` | F7 FX volatility — **Bearer**; **requires ML** |
 | GET | `/api/analytics/fx/pairs` | List available synced FX pairs for F7 |
 | GET | `/api/orders` | All orders |
 | GET | `/api/orders/anomalies` | Orders flagged by anomaly logic |
@@ -299,13 +314,13 @@ Dashboard top exporters/importers and country analytics aggregate by **`reporter
 | POST | `/api/marketplace/quotes/:id/accept` | Accept quote + create deal |
 | GET | `/api/marketplace/deals` | RFQ-derived deals |
 | PUT | `/api/marketplace/deals/:id/settlement` | Update settlement tracking |
-| POST | `/api/payment/create-session` | Stripe checkout session |
-| POST | `/api/payment/webhook` | Stripe webhook (raw body); upgrades tier on completed checkout |
-| POST | `/api/payment/demo-upgrade` | Demo premium upgrade if `DEMO_PAYMENT=true` |
-| GET | `/api/payment/status/:userId` | User tier (free/premium) |
+| POST | `/api/payment/create-session` | Stripe checkout — body `tier`: `gold` \| `diamond`, `email`; Bearer auth |
+| POST | `/api/payment/webhook` | Stripe webhook (raw body); sets `User.tier` from metadata `targetTier` |
+| POST | `/api/payment/demo-upgrade` | Demo tier upgrade (`targetTier`) if `DEMO_PAYMENT=true`; Bearer auth |
+| GET | `/api/payment/status/:userId` | User tier (`silver` / `gold` / `diamond`) |
 | POST | `/api/sim/profitability` | F11 margin simulation |
 | POST | `/api/sim/landed-cost` | F13 landed cost simulation |
-| GET | `/api/reports/trade-summary` | F15 PDF — top exporters/importers (same data as dashboard) |
+| GET | `/api/reports/trade-summary` | F15 PDF — **Bearer + Gold+**; same figures as dashboard |
 | POST | `/api/advisory/recommend` | F14 advisory — body: `countryCode`, optional `commodity` id; uses ML risk when available |
 
 ### ML Service (port 8000)
@@ -335,7 +350,7 @@ Dashboard top exporters/importers and country analytics aggregate by **`reporter
 - Pages are in `frontend/src/pages/`
 - Components are in `frontend/src/components/`
 - All API calls use `http://localhost:5000/api` as base
-- Routes include `/risk`, `/risk/breakdown`, `/compare`, `/forecasts`, `/advisory`, `/alerts`, `/orders`, `/sim`, `/premium`, payment return URLs
+- Routes include `/risk`, `/risk/breakdown`, `/compare`, `/forecasts`, `/advisory`, `/alerts`, `/orders`, `/sim`, `/plans`, `/premium`, payment return URLs
 
 ### Member C (ML Service)
 

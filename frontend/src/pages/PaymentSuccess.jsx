@@ -7,8 +7,9 @@ function PaymentSuccess() {
       <CheckCircle className="mx-auto text-[#8ab4ff]" size={56} />
       <h1 className="text-2xl font-semibold tracking-tight text-neutral-100">Payment successful</h1>
       <p className="text-neutral-400">
-        Thank you. If checkout completed, your account may be upgraded to
-        Premium after Stripe confirms the payment (webhook).
+        Thank you. After Stripe confirms payment (webhook), your plan updates to the
+        Gold or Diamond tier you purchased. Sign out and back in if the navbar label
+        still shows your old plan.
       </p>
       <Link
         to="/dashboard"

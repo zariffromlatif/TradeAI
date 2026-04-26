@@ -1,74 +1,260 @@
 const express = require("express");
-const PDFDocument = require("pdfkit");
-const { getDashboardAggregates } = require("../services/dashboardStats");
+const fs = require("node:fs/promises");
+const { requireAuth, attachUser, requireMinTier } = require("../middleware/auth");
+const ReportJob = require("../models/ReportJob");
+const Country = require("../models/Country");
+const { enqueueReportJob, cancelQueueJob, reportQueue } = require("../queues/reportQueue");
+const { normalizeSections, buildReportData, buildPdfBuffer } = require("../services/reportBuilder");
 
 const router = express.Router();
 
-function fmtMoney(n) {
-  if (typeof n !== "number" || Number.isNaN(n)) return "—";
-  return `$${(n / 1e6).toFixed(2)}M`;
-}
-
-// GET /api/reports/trade-summary — PDF snapshot (same figures as dashboard API)
-router.get("/trade-summary", async (req, res) => {
+// GET /api/reports/trade-summary — PDF snapshot (Gold+; Silver uses dashboard JSON only)
+router.get("/trade-summary", requireAuth, requireMinTier("gold"), async (req, res) => {
   try {
-    const { topExporters, topImporters } = await getDashboardAggregates();
-
+    const reportData = await buildReportData({ sections: ["analytics"] });
+    const pdfBuffer = await buildPdfBuffer("TradeAI — Trade summary", reportData);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader(
       "Content-Disposition",
       'attachment; filename="tradeai-trade-summary.pdf"',
     );
-
-    const doc = new PDFDocument({ margin: 50 });
-    doc.pipe(res);
-
-    doc.fontSize(20).text("TradeAI — Trade summary", { underline: true });
-    doc.moveDown();
-    doc
-      .fontSize(10)
-      .fillColor("#666666")
-      .text(`Generated: ${new Date().toISOString()}`, { align: "left" });
-    doc
-      .fontSize(9)
-      .text(
-        "Illustrative snapshot only — not financial, legal, or compliance advice.",
-        { align: "left" },
-      );
-    doc.moveDown(1.5);
-    doc.fillColor("#000000").fontSize(14).text("Top 5 exporters", {
-      underline: true,
-    });
-    doc.moveDown(0.5);
-    doc.fontSize(11);
-    if (!topExporters.length) {
-      doc.text("No export data.");
-    } else {
-      topExporters.forEach((row, i) => {
-        doc.text(
-          `${i + 1}. ${row.country} — ${fmtMoney(row.totalExportValue)}`,
-        );
-      });
-    }
-    doc.moveDown(1.2);
-    doc.fontSize(14).text("Top 5 importers", { underline: true });
-    doc.moveDown(0.5);
-    doc.fontSize(11);
-    if (!topImporters.length) {
-      doc.text("No import data.");
-    } else {
-      topImporters.forEach((row, i) => {
-        doc.text(
-          `${i + 1}. ${row.country} — ${fmtMoney(row.totalImportValue)}`,
-        );
-      });
-    }
-
-    doc.end();
+    res.send(pdfBuffer);
   } catch (err) {
     if (!res.headersSent) {
       res.status(500).json({ message: err.message });
     }
+  }
+});
+
+// POST /api/reports/generate
+// Creates report job metadata and enqueues async generation.
+router.post("/generate", requireAuth, attachUser, async (req, res) => {
+  try {
+    const sections = normalizeSections(req.body.sections);
+    const countryCode = req.body.countryCode
+      ? String(req.body.countryCode).toUpperCase()
+      : null;
+    const commodityId = req.body.commodityId || null;
+    const title = String(req.body.title || "TradeAI Intelligence Report").trim();
+    const scope = req.user.role === "admin" && req.body.scope === "admin_all" ? "admin_all" : "self";
+
+    if (countryCode) {
+      const exists = await Country.findOne({ code: countryCode }).select("_id").lean();
+      if (!exists) return res.status(404).json({ message: "Country not found for report." });
+    }
+
+    const job = await ReportJob.create({
+      ownerId: req.user._id,
+      scope,
+      title,
+      countryCode,
+      commodityId,
+      sections,
+      status: "pending",
+      dateFrom: req.body.dateFrom || null,
+      dateTo: req.body.dateTo || null,
+    });
+
+    const queueJob = await enqueueReportJob(job._id);
+    job.queueJobId = String(queueJob.id);
+    await job.save();
+
+    res.status(201).json({
+      ...job.toObject(),
+      queueState: "enqueued",
+    });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
+  }
+});
+
+// GET /api/reports/:id/status
+router.get("/:id/status", requireAuth, attachUser, async (req, res) => {
+  try {
+    const job = await ReportJob.findById(req.params.id).select(
+      "_id ownerId status queueJobId generatedAt errorMessage createdAt updatedAt reportFileName reportFileSize",
+    );
+    if (!job) return res.status(404).json({ message: "Report job not found" });
+    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Not allowed to access this report job" });
+    }
+    return res.json(job);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/reports/history
+router.get("/history", requireAuth, attachUser, async (req, res) => {
+  try {
+    const filter = req.user.role === "admin" && req.query.scope === "all"
+      ? {}
+      : { ownerId: req.user._id };
+    if (req.query.status) filter.status = String(req.query.status);
+    if (req.query.countryCode) filter.countryCode = String(req.query.countryCode).toUpperCase();
+    if (req.user.role === "admin" && req.query.ownerId) {
+      filter.ownerId = String(req.query.ownerId);
+    }
+    if (req.query.from || req.query.to) {
+      filter.createdAt = {};
+      if (req.query.from) filter.createdAt.$gte = new Date(req.query.from);
+      if (req.query.to) filter.createdAt.$lte = new Date(req.query.to);
+    }
+    const rows = await ReportJob.find(filter)
+      .populate("ownerId", "name email role tier")
+      .populate("commodityId", "name")
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/reports/metrics
+router.get("/metrics", requireAuth, attachUser, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: "Admin role required" });
+    }
+
+    const [
+      pendingCount,
+      readyCount,
+      failedCount,
+      cancelledCount,
+      filesAgg,
+      waitingJobs,
+      activeJobs,
+      delayedJobs,
+      failedJobs,
+    ] = await Promise.all([
+      ReportJob.countDocuments({ status: "pending" }),
+      ReportJob.countDocuments({ status: "ready" }),
+      ReportJob.countDocuments({ status: "failed" }),
+      ReportJob.countDocuments({ status: "cancelled" }),
+      ReportJob.aggregate([
+        { $match: { reportFileSize: { $ne: null } } },
+        { $group: { _id: null, totalBytes: { $sum: "$reportFileSize" }, fileCount: { $sum: 1 } } },
+      ]),
+      reportQueue.getWaitingCount(),
+      reportQueue.getActiveCount(),
+      reportQueue.getDelayedCount(),
+      reportQueue.getFailedCount(),
+    ]);
+
+    return res.json({
+      jobs: {
+        pending: pendingCount,
+        ready: readyCount,
+        failed: failedCount,
+        cancelled: cancelledCount,
+      },
+      queue: {
+        waiting: waitingJobs,
+        active: activeJobs,
+        delayed: delayedJobs,
+        failed: failedJobs,
+      },
+      storage: {
+        files: filesAgg[0]?.fileCount || 0,
+        totalBytes: filesAgg[0]?.totalBytes || 0,
+      },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/reports/:id/retry
+router.post("/:id/retry", requireAuth, attachUser, async (req, res) => {
+  try {
+    const job = await ReportJob.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: "Report job not found" });
+    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Not allowed to retry this report job" });
+    }
+    if (!["failed", "cancelled"].includes(job.status)) {
+      return res.status(409).json({ message: "Only failed/cancelled jobs can be retried" });
+    }
+    job.status = "pending";
+    job.errorMessage = "";
+    job.snapshot = null;
+    job.generatedAt = null;
+    await job.save();
+
+    const queueJob = await enqueueReportJob(job._id);
+    job.queueJobId = String(queueJob.id);
+    await job.save();
+    return res.json(job);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/reports/:id/cancel
+router.post("/:id/cancel", requireAuth, attachUser, async (req, res) => {
+  try {
+    const job = await ReportJob.findById(req.params.id);
+    if (!job) return res.status(404).json({ message: "Report job not found" });
+    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Not allowed to cancel this report job" });
+    }
+    if (job.status !== "pending") {
+      return res.status(409).json({ message: "Only pending jobs can be cancelled" });
+    }
+    await cancelQueueJob(job.queueJobId);
+    job.status = "cancelled";
+    job.errorMessage = "Cancelled by user";
+    await job.save();
+    return res.json(job);
+  } catch (err) {
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// GET /api/reports/:id/download
+router.get("/:id/download", requireAuth, attachUser, async (req, res) => {
+  try {
+    const job = await ReportJob.findById(req.params.id).populate("commodityId", "name");
+    if (!job) return res.status(404).json({ message: "Report job not found" });
+    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Not allowed to download this report" });
+    }
+    if (job.status !== "ready") {
+      return res.status(409).json({ message: `Report status is ${job.status}` });
+    }
+
+    const reportData =
+      job.snapshot ||
+      (await buildReportData({
+        sections: job.sections,
+        countryCode: job.countryCode,
+        commodityId: job.commodityId?._id || null,
+        dateFrom: job.dateFrom,
+        dateTo: job.dateTo,
+      }));
+    const filename = `tradeai-report-${job._id}.pdf`;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${job.reportFileName || filename}"`,
+    );
+    let pdfBuffer = null;
+    if (job.reportFilePath) {
+      try {
+        pdfBuffer = await fs.readFile(job.reportFilePath);
+      } catch {
+        pdfBuffer = null;
+      }
+    }
+    if (!pdfBuffer) {
+      pdfBuffer = await buildPdfBuffer(job.title || "TradeAI Intelligence Report", reportData);
+    }
+    res.send(pdfBuffer);
+  } catch (err) {
+    if (!res.headersSent) res.status(500).json({ message: err.message });
   }
 });
 

@@ -130,11 +130,15 @@ function Orders() {
         return;
       }
       const fxVol = 0.25;
-      const response = await axios.post(`${API}/analytics/forecast/optimal-bid-range`, {
-        historical_prices: historicalPrices,
-        fx_volatility: fxVol,
-        shipping_cost_index: 1.0,
-      });
+      const response = await axios.post(
+        `${API}/analytics/forecast/optimal-bid-range`,
+        {
+          historical_prices: historicalPrices,
+          fx_volatility: fxVol,
+          shipping_cost_index: 1.0,
+        },
+        { headers: authHeaders },
+      );
       setOptimalRange(response.data);
     } catch (err) {
       setOptimalRange({

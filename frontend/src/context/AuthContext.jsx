@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom"; // <-- 1. Import useNavigate
@@ -75,6 +76,21 @@ export function AuthProvider({ children }) {
     return userData;
   };
 
+  const refreshTokenClaims = async () => {
+    const savedToken = localStorage.getItem("tradeai_token");
+    if (!savedToken) return null;
+    const res = await axios.post(
+      `${API_BASE_URL}/auth/refresh-token-claims`,
+      {},
+      { headers: { Authorization: `Bearer ${savedToken}` } },
+    );
+    const { token: newToken, user: userData } = res.data;
+    localStorage.setItem("tradeai_token", newToken);
+    setToken(newToken);
+    setUser(userData);
+    return userData;
+  };
+
 const logout = () => {
     // 1. Route to the public dashboard FIRST
     navigate("/dashboard", { replace: true });
@@ -88,7 +104,7 @@ const logout = () => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, isAuthenticated, login, register, logout, api }}>
+    <AuthContext.Provider value={{ user, token, loading, isAuthenticated, login, register, logout, api, refreshTokenClaims }}>
       {children}
     </AuthContext.Provider>
   );

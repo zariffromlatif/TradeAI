@@ -12,10 +12,12 @@ import {
 import { Globe, TrendingUp, TrendingDown, Activity, FileDown } from "lucide-react";
 import StatCard from "../components/StatCard";
 import { API_BASE_URL } from "../config/api";
+import { useAuth } from "../context/AuthContext";
 
 const API = API_BASE_URL;
 
 function Dashboard() {
+  const { token } = useAuth();
   const [dashboard, setDashboard] = useState({
     topExporters: [],
     topImporters: [],
@@ -39,10 +41,15 @@ function Dashboard() {
 
   const downloadTradeSummaryPdf = async () => {
     setPdfError("");
+    if (!token) {
+      setPdfError("Sign in to download the PDF.");
+      return;
+    }
     setPdfLoading(true);
     try {
       const res = await axios.get(`${API}/reports/trade-summary`, {
         responseType: "blob",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const blob = new Blob([res.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
@@ -52,9 +59,15 @@ function Dashboard() {
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      setPdfError(
-        err.response?.data?.message || err.message || "PDF download failed.",
-      );
+      if (err.response?.status === 401) {
+        setPdfError("Session expired. Sign in again to download the PDF.");
+      } else if (err.response?.status === 403) {
+        setPdfError("PDF export requires Gold or Diamond. Open Plans to upgrade.");
+      } else {
+        setPdfError(
+          err.response?.data?.message || err.message || "PDF download failed.",
+        );
+      }
     } finally {
       setPdfLoading(false);
     }

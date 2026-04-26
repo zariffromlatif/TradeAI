@@ -180,6 +180,33 @@ function Advisory() {
             </ul>
           </div>
 
+          {result.advancedRecommendations?.length > 0 && (
+            <div>
+              <h2 className="text-lg font-semibold text-neutral-100 mb-3">
+                Advanced Advisory (F15)
+              </h2>
+              <ul className="space-y-3">
+                {result.advancedRecommendations.map((r) => (
+                  <li
+                    key={r.id}
+                    className={`rounded-xl border px-4 py-3 ${severityStyles[r.severity] || severityStyles.low}`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="font-medium text-neutral-100">{r.title}</div>
+                      <span className="text-[10px] uppercase tracking-wide opacity-70">
+                        {r.type.replace("_", " ")}
+                      </span>
+                    </div>
+                    <p className="text-sm mt-1 opacity-90">{r.detail}</p>
+                    <span className="text-xs uppercase tracking-wide opacity-60 mt-2 inline-block">
+                      Confidence: {r.confidence || "MEDIUM"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <p className="text-neutral-600 text-xs">{result.disclaimer}</p>
         </div>
       )}

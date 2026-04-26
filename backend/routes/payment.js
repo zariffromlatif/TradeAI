@@ -1,71 +1,119 @@
 const express = require("express");
 const mongoose = require("mongoose");
-const router = express.Router();
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const Stripe = require("stripe");
 const User = require("../models/User");
+const {
+  isUpgradeTargetTier,
+  mergeTierUpgrade,
+} = require("../services/tier");
+const { requireAuth, attachUser } = require("../middleware/auth");
+
+const router = express.Router();
+
+let stripeSingleton = null;
+function getStripe() {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) {
+    const err = new Error("Stripe is not configured (missing STRIPE_SECRET_KEY).");
+    err.statusCode = 503;
+    throw err;
+  }
+  if (!stripeSingleton) stripeSingleton = new Stripe(key);
+  return stripeSingleton;
+}
+
+function frontendBaseUrl() {
+  const explicit = process.env.FRONTEND_PUBLIC_URL || process.env.FRONTEND_URL;
+  if (explicit) return explicit.replace(/\/$/, "");
+  const cors = (process.env.CORS_ORIGINS || "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean);
+  if (cors.length) return cors[0].replace(/\/$/, "");
+  return "http://localhost:5173";
+}
+
+const GOLD_CENTS = Number(process.env.STRIPE_GOLD_AMOUNT_CENTS) || 2999;
+const DIAMOND_CENTS = Number(process.env.STRIPE_DIAMOND_AMOUNT_CENTS) || 7999;
+
+function lineItemForTier(tier) {
+  const t = String(tier).toLowerCase();
+  if (t === "diamond") {
+    return {
+      price_data: {
+        currency: "usd",
+        product_data: { name: "TradeAI Diamond plan" },
+        unit_amount: DIAMOND_CENTS,
+      },
+      quantity: 1,
+    };
+  }
+  return {
+    price_data: {
+      currency: "usd",
+      product_data: { name: "TradeAI Gold plan" },
+      unit_amount: GOLD_CENTS,
+    },
+    quantity: 1,
+  };
+}
 
 // POST /api/payment/create-session
-// Creates a Stripe checkout session for upgrading to premium
-router.post("/create-session", async (req, res) => {
+// Authenticated: charges the logged-in user; tier must be gold or diamond.
+router.post("/create-session", requireAuth, attachUser, async (req, res) => {
   try {
-    const { userId, email } = req.body;
+    const { tier, email } = req.body;
+    const targetTier = String(tier || "").toLowerCase();
+    if (!isUpgradeTargetTier(targetTier)) {
+      return res.status(400).json({
+        message: "tier must be gold or diamond",
+      });
+    }
+    const userId = req.user._id.toString();
+    const customerEmail = email || req.user.email;
+    const base = frontendBaseUrl();
+    const stripe = getStripe();
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       mode: "payment",
-      customer_email: email,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: { name: "TradeAI Premium Access" },
-            unit_amount: 2999, // $29.99
-          },
-          quantity: 1,
-        },
-      ],
-      metadata: { userId },
-      success_url: "http://localhost:5173/payment/success",
-      cancel_url: "http://localhost:5173/payment/cancel",
+      customer_email: customerEmail,
+      line_items: [lineItemForTier(targetTier)],
+      metadata: { userId, targetTier },
+      success_url: `${base}/payment/success`,
+      cancel_url: `${base}/payment/cancel`,
     });
 
     res.json({ url: session.url, sessionId: session.id });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    const status = err.statusCode || 500;
+    res.status(status).json({ message: err.message });
   }
 });
 
 // POST /api/payment/demo-upgrade
-// Local/demo only: sets tier to premium without Stripe. Requires DEMO_PAYMENT=true in .env
-router.post("/demo-upgrade", async (req, res) => {
+// Local/demo only. Body: { targetTier: "gold" | "diamond" } — upgrades logged-in user.
+router.post("/demo-upgrade", requireAuth, attachUser, async (req, res) => {
   if (process.env.DEMO_PAYMENT !== "true") {
     return res.status(403).json({ message: "Demo payment is disabled" });
   }
   try {
-    const { userId } = req.body;
-    if (
-      !userId ||
-      typeof userId !== "string" ||
-      !mongoose.Types.ObjectId.isValid(userId)
-    ) {
-      return res.status(400).json({ message: "Valid userId is required" });
+    const targetTier = String(req.body.targetTier || req.body.tier || "gold").toLowerCase();
+    if (!isUpgradeTargetTier(targetTier)) {
+      return res.status(400).json({ message: "targetTier must be gold or diamond" });
     }
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { tier: "premium" },
-      { new: true },
-    ).select("name email tier");
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    res.json({ ok: true, user });
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    user.tier = mergeTierUpgrade(user.tier, targetTier);
+    await user.save();
+    const fresh = await User.findById(user._id).select("name email tier");
+    res.json({ ok: true, user: fresh });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 });
 
 // POST /api/payment/webhook
-// Stripe calls this when payment is confirmed — upgrades user tier
 router.post(
   "/webhook",
   express.raw({ type: "application/json" }),
@@ -74,27 +122,35 @@ router.post(
     let event;
 
     try {
+      const stripe = getStripe();
       event = stripe.webhooks.constructEvent(
         req.body,
         sig,
         process.env.STRIPE_WEBHOOK_SECRET,
       );
     } catch (err) {
-      return res.status(400).json({ message: `Webhook error: ${err.message}` });
+      const status = err.statusCode === 503 ? 503 : 400;
+      return res.status(status).json({ message: `Webhook error: ${err.message}` });
     }
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object;
-      const userId = session.metadata.userId;
-      await User.findByIdAndUpdate(userId, { tier: "premium" });
+      const userId = session.metadata?.userId;
+      let targetTier = String(session.metadata?.targetTier || "gold").toLowerCase();
+      if (!isUpgradeTargetTier(targetTier)) targetTier = "gold";
+      if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+        const user = await User.findById(userId);
+        if (user) {
+          user.tier = mergeTierUpgrade(user.tier, targetTier);
+          await user.save();
+        }
+      }
     }
 
     res.json({ received: true });
   },
 );
 
-// GET /api/payment/status/:userId
-// Returns current tier of a user
 router.get("/status/:userId", async (req, res) => {
   try {
     const user = await User.findById(req.params.userId).select(

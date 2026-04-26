@@ -260,7 +260,7 @@ Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
 - Both files are already mounted in `server.js` — just add your route handlers
 - Create `backend/models/Order.js` and `backend/models/User.js` for your schemas
 - Order schema needs: `commodity`, `country`, `type` (buy/sell), `quantity`, `pricePerUnit`, `totalValue`, `status`
-- User schema needs: `email`, `password`, `tier` (free/premium)
+- User schema needs: `email`, `password`, `tier` (`silver` / `gold` / `diamond`)
 
 ---
 
