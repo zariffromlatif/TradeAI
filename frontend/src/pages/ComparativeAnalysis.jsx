@@ -9,8 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
-  Legend,
-  Brush
+  Legend
 } from "recharts";
 
 const API = API_BASE_URL;
@@ -18,61 +17,57 @@ const API = API_BASE_URL;
 function ComparativeAnalysis() {
   const [countries, setCountries] = useState([]);
   const [commodities, setCommodities] = useState([]);
-
-  const [selectedCountries, setSelectedCountries] = useState([]);
-  const [selectedCommodities, setSelectedCommodities] = useState([]);
+  
+  // The User Selections
+  const [countryA, setCountryA] = useState("");
+  const [countryB, setCountryB] = useState("");
+  const [commodity, setCommodity] = useState("");
   const [tradeType, setTradeType] = useState("export");
-
+  
+  // The Graph Data
   const [chartData, setChartData] = useState([]);
-  const [cards, setCards] = useState([]);
-  const [priceDiffs, setPriceDiffs] = useState([]);
-  const [meta, setMeta] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // 1. Fetch Dropdowns on page load
   useEffect(() => {
     axios.get(`${API}/countries`).then((res) => {
-      const realCountries = res.data.filter(c => 
-        c.code !== "WLD" && 
-        !c.name.toLowerCase().includes("world")
-      );
+      const realCountries = res.data.filter(c => c.code !== "WLD" && !c.name.toLowerCase().includes("world"));
       setCountries(realCountries);
-    }).catch(err => console.error("Failed to load countries:", err));
+    }).catch(err => console.error(err));
 
     axios.get(`${API}/commodities`).then((res) => {
-      const cleanCommodities = res.data.filter(c => 
-        !c.name.toLowerCase().includes("hs total") && 
-        !c.name.toLowerCase().includes("all commodities")
-      );
+      const cleanCommodities = res.data.filter(c => !c.name.toLowerCase().includes("hs total") && !c.name.toLowerCase().includes("all"));
       setCommodities(cleanCommodities);
-      setSelectedCommodities(cleanCommodities.slice(0, 1).map((c) => c._id));
-    }).catch(err => console.error("Failed to load commodities:", err));
+      // Auto-select the first commodity so the user only has to pick countries
+      if (cleanCommodities.length > 0) {
+        setCommodity(cleanCommodities[0]._id);
+      }
+    }).catch(err => console.error(err));
   }, []);
 
-  const fetchComparison = () => {
-    if (selectedCountries.length < 2) return;
+  // 2. AUTO-RUN LOGIC: Watch the dropdowns and fetch data instantly
+  useEffect(() => {
+    // If any of these three are missing, do not run the graph yet
+    if (!countryA || !countryB || !commodity) return;
+    
     setLoading(true);
     setError("");
-    axios
-      .get(`${API}/analytics/compare`, {
-        params: {
-          countries: selectedCountries.join(","),
-          commodities: selectedCommodities.join(","),
-          type: tradeType,
-        },
-      })
-      .then((res) => {
-        setChartData(res.data.trendData || []);
-        setCards(res.data.comparisonCards || []);
-        setPriceDiffs(res.data.priceDifferentials || []);
-        setMeta(res.data.meta);
-      })
-      .catch((err) => {
-        console.error(err);
-        setError(err.response?.data?.message || "Comparison failed.");
-      })
-      .finally(() => setLoading(false));
-  };
+    
+    axios.get(`${API}/analytics/compare`, {
+      params: {
+        countries: `${countryA},${countryB}`,
+        commodities: commodity,
+        type: tradeType
+      }
+    }).then((res) => {
+      setChartData(res.data.trendData || []);
+    }).catch(() => {
+      setError("Failed to load comparison data.");
+    }).finally(() => {
+      setLoading(false);
+    });
+  }, [countryA, countryB, commodity, tradeType]); // React watches these 4 variables!
 
   return (
     <div className="space-y-6">
@@ -80,35 +75,43 @@ function ComparativeAnalysis() {
 
       {/* Control Panel */}
       <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5 flex flex-wrap gap-6 items-end">
+        
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-400">Countries (2-4)</label>
-          <select
-            multiple
-            value={selectedCountries}
-            onChange={(e) =>
-              setSelectedCountries(
-                Array.from(e.target.selectedOptions).map((x) => x.value).slice(0, 4),
-              )
-            }
-            className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 min-w-[260px] h-28 outline-none focus:border-[#8ab4ff]"
+          <label className="text-sm font-medium text-neutral-400">Comparison Country 1</label>
+          <select 
+            value={countryA} 
+            onChange={(e) => setCountryA(e.target.value)}
+            className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 outline-none focus:border-[#8ab4ff]"
           >
-            {countries.map(c => (
+            <option value="">Select Country 1...</option>
+            {countries.filter(c => c.code !== countryB).map(c => (
               <option key={c._id} value={c.code}>{c.name} ({c.code})</option>
             ))}
           </select>
         </div>
+
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-neutral-400">Commodities (up to 3)</label>
-          <select
-            multiple
-            value={selectedCommodities}
-            onChange={(e) =>
-              setSelectedCommodities(
-                Array.from(e.target.selectedOptions).map((x) => x.value).slice(0, 3),
-              )
-            }
-            className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 min-w-[260px] h-28 outline-none focus:border-[#8ab4ff]"
+          <label className="text-sm font-medium text-neutral-400">Comparison Country 2</label>
+          <select 
+            value={countryB} 
+            onChange={(e) => setCountryB(e.target.value)}
+            className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 outline-none focus:border-[#8ab4ff]"
           >
+            <option value="">Select Country 2...</option>
+            {countries.filter(c => c.code !== countryA).map(c => (
+              <option key={c._id} value={c.code}>{c.name} ({c.code})</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <label className="text-sm font-medium text-neutral-400">Product / Commodity</label>
+          <select 
+            value={commodity} 
+            onChange={(e) => setCommodity(e.target.value)}
+            className="bg-[#171717] border border-[#2a2a2a] text-neutral-100 rounded-xl px-4 py-2 outline-none focus:border-[#8ab4ff]"
+          >
+            <option value="">Select Commodity...</option>
             {commodities.map(c => (
               <option key={c._id} value={c._id}>{c.name}</option>
             ))}
@@ -132,41 +135,35 @@ function ComparativeAnalysis() {
             </button>
           </div>
         </div>
-        <button className="btn-ui btn-primary" onClick={fetchComparison}>
-          Run compare
-        </button>
       </div>
 
-      {/* Visualization */}
-      <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <h2 className="text-neutral-100 font-semibold">
-            {selectedCountries.length < 2
-              ? "Select at least 2 countries"
-              : meta 
-                ? `${tradeType === "export" ? "Export" : "Import"} trend (${meta.commodities?.[0]?.name || "Primary commodity"})`
-                : "Loading comparison..."}
-          </h2>
-        </div>
-        {error && <p className="text-red-300 text-sm mb-3">{error}</p>}
-
-        {selectedCountries.length < 2 ? (
-          <p className="text-neutral-400 text-center py-16">Waiting for country selection...</p>
+      {/* Visualization Graph */}
+      <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5 h-[450px]">
+        {error && <p className="text-red-400 mb-4">{error}</p>}
+        
+        {!countryA || !countryB || !commodity ? (
+          <div className="flex items-center justify-center h-full text-neutral-500">
+            Select two countries to view the comparative graph.
+          </div>
         ) : loading ? (
-          <p className="text-neutral-400 text-center py-16">Crunching comparison data...</p>
+          <div className="flex items-center justify-center h-full text-[#8ab4ff]">
+            Loading overlap data...
+          </div>
         ) : chartData.length === 0 ? (
-          <p className="text-neutral-400 text-center py-16">No overlapping trade records found for this selection.</p>
+          <div className="flex items-center justify-center h-full text-neutral-500">
+            No overlapping trade records found for this combination.
+          </div>
         ) : (
-          <ResponsiveContainer width="100%" height={400}>
+          <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorA" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8ab4ff" stopOpacity={0.28}/>
+                  <stop offset="5%" stopColor="#8ab4ff" stopOpacity={0.3}/>
                   <stop offset="95%" stopColor="#8ab4ff" stopOpacity={0}/>
                 </linearGradient>
                 <linearGradient id="colorB" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#e5e5e5" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#e5e5e5" stopOpacity={0}/>
+                  <stop offset="5%" stopColor="#34d399" stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor="#34d399" stopOpacity={0}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" vertical={false} />
@@ -175,73 +172,23 @@ function ComparativeAnalysis() {
               <Tooltip
                 contentStyle={{ backgroundColor: "#111111", border: "1px solid #2a2a2a", borderRadius: "10px", color: "#f5f5f5" }}
                 formatter={(value, name) => {
-                  const countryName = name === meta?.countryA.code ? meta?.countryA.name : meta?.countryB.name;
+                  const countryName = countries.find(c => c.code === name)?.name || name;
                   return [`$${value.toLocaleString()}`, countryName];
                 }}
               />
               <Legend verticalAlign="top" height={36} wrapperStyle={{ color: "#d4d4d4" }} />
-              {(meta?.countries || []).map((c, idx) => (
-                <Area
-                  key={c.code}
-                  type="monotone"
-                  dataKey={c.code}
-                  stroke={idx % 2 === 0 ? "#8ab4ff" : "#e5e5e5"}
-                  fillOpacity={1}
-                  fill={idx % 2 === 0 ? "url(#colorA)" : "url(#colorB)"}
-                  strokeWidth={2.25}
-                  name={c.code}
-                />
-              ))}
-              <Brush 
-                dataKey="date" 
-                height={30} 
-                stroke="#2a2a2a" 
-                fill="#111111"
-                tickFormatter={() => ""} 
-              />
+              
+              {/* Because the seed.js overlaps perfectly, we can put both lines on ONE graph! */}
+              {countryA && (
+                <Area type="monotone" dataKey={countryA} stroke="#8ab4ff" fillOpacity={1} fill="url(#colorA)" strokeWidth={2.25} connectNulls={true} />
+              )}
+              {countryB && (
+                <Area type="monotone" dataKey={countryB} stroke="#34d399" fillOpacity={1} fill="url(#colorB)" strokeWidth={2.25} connectNulls={true} />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         )}
       </div>
-
-      {!loading && cards.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {cards.map((card, idx) => (
-            <div key={`${card.country.code}-${card.commodity.id}-${idx}`} className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-4">
-              <h3 className="text-neutral-100 font-medium">{card.country.name} - {card.commodity.name}</h3>
-              <p className="text-sm text-neutral-400 mt-2">
-                Total value: ${Number(card.totalValue || 0).toLocaleString()}
-              </p>
-              <p className="text-sm text-neutral-400">
-                Avg unit price: {card.avgUnitPrice != null ? `$${card.avgUnitPrice.toFixed(2)}` : "-"}
-              </p>
-              <p className="text-sm text-neutral-400">
-                YoY growth: {card.yoyGrowthPct != null ? `${card.yoyGrowthPct.toFixed(2)}%` : "-"}
-              </p>
-              <p className="text-sm text-neutral-400">
-                Risk score (proxy): {card.riskScore.toFixed(1)}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!loading && priceDiffs.length > 0 && (
-        <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5">
-          <h2 className="text-neutral-100 font-semibold mb-3">Commodity Price Differentials</h2>
-          <div className="space-y-2 text-sm">
-            {priceDiffs.map((row) => (
-              <div key={row.commodity.id} className="text-neutral-300">
-                {row.commodity.name}: min{" "}
-                {row.avgPriceMin != null ? `$${row.avgPriceMin.toFixed(2)}` : "-"}
-                {" | "}max {row.avgPriceMax != null ? `$${row.avgPriceMax.toFixed(2)}` : "-"}
-                {" | "}diff{" "}
-                {row.avgPriceDiffPct != null ? `${row.avgPriceDiffPct.toFixed(2)}%` : "-"}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

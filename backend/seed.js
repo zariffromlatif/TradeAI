@@ -1,3 +1,6 @@
+const dns = require('node:dns');
+dns.setServers(['1.1.1.1', '8.8.8.8']);
+
 const mongoose = require("mongoose");
 require("dotenv").config();
 
@@ -126,7 +129,7 @@ function generateHistory(currentPrice, months) {
   for (let i = months; i >= 0; i--) {
     const date = new Date();
     date.setMonth(date.getMonth() - i);
-    const fluctuation = (Math.random() - 0.5) * 0.1; // ±5% variation
+    const fluctuation = (Math.random() - 0.5) * 0.1;
     history.push({
       date,
       price: parseFloat((currentPrice * (1 + fluctuation)).toFixed(2)),
@@ -139,18 +142,15 @@ async function seed() {
   await mongoose.connect(process.env.MONGO_URI);
   console.log("Connected to MongoDB");
 
-  // Clear existing data
   await Country.deleteMany({});
   await Commodity.deleteMany({});
   await TradeRecord.deleteMany({});
   console.log("Cleared existing data");
 
-  // Insert countries and commodities
   const savedCountries = await Country.insertMany(countries);
   const savedCommodities = await Commodity.insertMany(commodities);
   console.log("Inserted countries and commodities");
 
-  // Generate trade records
   const tradeRecords = [];
 
   for (const country of savedCountries) {
@@ -159,11 +159,7 @@ async function seed() {
         const date = new Date();
         date.setMonth(date.getMonth() - m);
 
-        // Pick a random partner country
         const partnerCountry = savedCountries[Math.floor(Math.random() * savedCountries.length)];
-
-        // For exports: reporter is the exporting country, partner is importing country
-        // For imports: reporter is the exporting country, partner is the importing country
         const isExport = Math.random() > 0.5;
 
         tradeRecords.push({
@@ -176,6 +172,42 @@ async function seed() {
           date,
           isVerified: true,
           source: "seed_demo",
+        });
+      }
+    }
+  }
+
+  for (const country of savedCountries) {
+    for (const commodity of savedCommodities) {
+      for (let m = 0; m < 6; m++) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - m);
+        d.setDate(1);
+
+        const partner = savedCountries.find(c => c.code !== country.code);
+
+        tradeRecords.push({
+          reporter: country._id,
+          partner: partner._id,
+          commodity: commodity._id,
+          type: "export",
+          volume: 5000 + (m * 500),
+          value: 1000000 + (m * 100000),
+          date: new Date(d),
+          isVerified: true,
+          source: "guaranteed"
+        });
+
+        tradeRecords.push({
+          reporter: country._id,
+          partner: partner._id,
+          commodity: commodity._id,
+          type: "import",
+          volume: 3000 + (m * 300),
+          value: 500000 + (m * 50000),
+          date: new Date(d),
+          isVerified: true,
+          source: "guaranteed"
         });
       }
     }
