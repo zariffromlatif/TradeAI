@@ -22,13 +22,12 @@ const UserSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-UserSchema.pre("save", function (next) {
+UserSchema.pre("save", function () {
   if (this.role === "admin") {
     this.tier = undefined;
   } else if (!this.tier) {
     this.tier = "silver";
   }
-  next();
 });
 
 module.exports = mongoose.model("User", UserSchema);

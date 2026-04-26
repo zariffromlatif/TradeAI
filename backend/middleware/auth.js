@@ -49,8 +49,22 @@ async function attachUser(req, res, next) {
 
 /** Require JWT tier at least `minTier` (silver | gold | diamond). */
 function requireMinTier(minTier) {
-  return (req, res, next) => {
-    const t = req.auth?.tier;
+  return async (req, res, next) => {
+    // Admin routes should never be blocked by subscription tier checks.
+    if (req.auth?.role === "admin") return next();
+
+    let t = req.auth?.tier;
+    // Token can be stale/missing tier after account changes; fallback to DB.
+    if (!t && req.auth?.sub) {
+      try {
+        const u = await User.findById(req.auth.sub).select("tier role").lean();
+        if (u?.role === "admin") return next();
+        t = u?.tier || null;
+      } catch (e) {
+        return res.status(500).json({ message: e.message });
+      }
+    }
+
     if (!t || tierRank(t) < tierRank(minTier)) {
       return res.status(403).json({
         message: `This action requires tier ${minTier} or higher.`,
