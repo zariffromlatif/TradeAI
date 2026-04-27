@@ -29,7 +29,7 @@ function Navbar() {
   ];
 
   const privateLinks = [
-    { to: "/compare", label: "Compare", icon: <GitCompare size={16} /> },
+    
     { to: "/forecasts", label: "Forecasts", icon: <LineChartIcon size={16} /> },
     { to: "/advisory", label: "Advisory", icon: <Lightbulb size={16} /> },
     { to: "/sim", label: "Simulate", icon: <Calculator size={16} /> },
