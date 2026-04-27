@@ -19,7 +19,6 @@ import Forecasts from "./pages/Forecasts";
 import Advisory from "./pages/Advisory";
 import SensitivityAnalysis from "./pages/SensitivityAnalysis";
 import TradeBalance from "./pages/TradeBalance";
-import PaymentRequests from "./pages/PaymentRequests";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import AdminDatasets from "./pages/admin/AdminDatasets";
@@ -65,7 +64,6 @@ function AppRoutes() {
       <Route path="/advisory" element={<ProtectedRoute><MainLayout><Advisory /></MainLayout></ProtectedRoute>} />
       <Route path="/premium" element={<ProtectedRoute><MainLayout><Premium /></MainLayout></ProtectedRoute>} />
       <Route path="/plans" element={<ProtectedRoute><MainLayout><Premium /></MainLayout></ProtectedRoute>} />
-      <Route path="/payment-requests" element={<ProtectedRoute><MainLayout><PaymentRequests /></MainLayout></ProtectedRoute>} />
       <Route path="/payment/success" element={<ProtectedRoute><MainLayout><PaymentSuccess /></MainLayout></ProtectedRoute>} />
       <Route path="/payment/cancel" element={<ProtectedRoute><MainLayout><PaymentCancel /></MainLayout></ProtectedRoute>} />
 

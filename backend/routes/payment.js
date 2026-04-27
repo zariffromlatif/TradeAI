@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const Stripe = require("stripe");
 const User = require("../models/User");
+const PaymentRequest = require("../models/PaymentRequest");
 const {
   isUpgradeTargetTier,
   mergeTierUpgrade,
@@ -92,7 +93,8 @@ router.post("/create-session", requireAuth, attachUser, async (req, res) => {
 });
 
 // POST /api/payment/demo-upgrade
-// Local/demo only. Body: { targetTier: "gold" | "diamond" } — upgrades logged-in user.
+// Local/demo only. Body: { targetTier: "gold" | "diamond" }.
+// Creates a pending payment request; tier is upgraded only after admin approval.
 router.post("/demo-upgrade", requireAuth, attachUser, async (req, res) => {
   if (process.env.DEMO_PAYMENT !== "true") {
     return res.status(403).json({ message: "Demo payment is disabled" });
@@ -104,10 +106,29 @@ router.post("/demo-upgrade", requireAuth, attachUser, async (req, res) => {
     }
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
-    user.tier = mergeTierUpgrade(user.tier, targetTier);
-    await user.save();
-    const fresh = await User.findById(user._id).select("name email tier");
-    res.json({ ok: true, user: fresh });
+    const merged = mergeTierUpgrade(user.tier, targetTier);
+    if (merged === user.tier) {
+      return res.status(409).json({ message: "You already meet or exceed this plan." });
+    }
+
+    const created = await PaymentRequest.create({
+      requesterId: user._id,
+      orderId: null,
+      amount: 0,
+      currency: "USD",
+      note: `Demo upgrade request to ${targetTier}. Pending admin approval.`,
+      requestTierUpgrade: true,
+      requestedTier: targetTier,
+      status: "pending",
+    });
+
+    return res.status(201).json({
+      ok: true,
+      message: "Demo upgrade request submitted. Your tier will update after admin approval.",
+      paymentRequestId: created._id,
+      requestedTier: targetTier,
+      status: created.status,
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

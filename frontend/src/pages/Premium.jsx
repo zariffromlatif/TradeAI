@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { API_BASE_URL } from "../config/api";
 import { useAuth } from "../context/AuthContext";
@@ -29,14 +28,14 @@ const TIERS = [
 ];
 
 function Premium() {
-  const navigate = useNavigate();
-  const { user, token, refreshTokenClaims } = useAuth();
+  const { user, token } = useAuth();
   const [email, setEmail] = useState("");
   const [checkoutTier, setCheckoutTier] = useState("gold");
   const [demoTier, setDemoTier] = useState("gold");
   const [error, setError] = useState("");
   const [loadingStripe, setLoadingStripe] = useState(false);
   const [loadingDemo, setLoadingDemo] = useState(false);
+  const [demoMessage, setDemoMessage] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -75,6 +74,7 @@ function Premium() {
 
   const handleDemoUpgrade = async () => {
     setError("");
+    setDemoMessage("");
     if (!token) {
       setError("Please sign in to use demo upgrade.");
       return;
@@ -82,12 +82,19 @@ function Premium() {
     setLoadingDemo(true);
     try {
       await axios.post(
-        `${API}/payment/demo-upgrade`,
-        { targetTier: demoTier },
+        `${API}/payment-requests`,
+        {
+          amount: 0,
+          currency: "USD",
+          note: `Demo upgrade request to ${demoTier}.`,
+          requestTierUpgrade: true,
+          requestedTier: demoTier,
+        },
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      await refreshTokenClaims?.();
-      navigate("/payment/success");
+      setDemoMessage(
+        "Request submitted. Tier will upgrade only after admin approval in Payment Requests.",
+      );
     } catch (err) {
       setError(err.response?.data?.message || err.message || "Request failed.");
     } finally {
@@ -182,9 +189,8 @@ function Premium() {
           Demo upgrade (local only)
         </h3>
         <p className="text-neutral-500 text-xs">
-          Requires <code className="text-[#8ab4ff]">DEMO_PAYMENT=true</code> in{" "}
-          <code className="text-[#8ab4ff]">backend/.env</code> and a server restart. Upgrades the{" "}
-          <strong>signed-in</strong> user only.
+          Submits a payment request for admin approval.
+          Tier changes only after admin approval.
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <select
@@ -201,9 +207,10 @@ function Premium() {
             disabled={loadingStripe || loadingDemo}
             className="btn-ui btn-secondary flex-1"
           >
-            {loadingDemo ? "Upgrading…" : `Simulate upgrade → ${tierLabel(demoTier)}`}
+            {loadingDemo ? "Submitting request…" : `Request demo upgrade → ${tierLabel(demoTier)}`}
           </button>
         </div>
+        {demoMessage && <p className="text-sm text-emerald-300">{demoMessage}</p>}
       </div>
     </div>
   );

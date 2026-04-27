@@ -34,14 +34,13 @@ function Navbar() {
     { to: "/advisory", label: "Advisory", icon: <Lightbulb size={16} /> },
     { to: "/sim", label: "Simulate", icon: <Calculator size={16} /> },
     { to: "/orders", label: "Marketplace", icon: <Package size={16} /> },
-    { to: "/payment-requests", label: "Payments", icon: <Sparkles size={16} /> },
+    { to: "/plans", label: "Payments", icon: <Sparkles size={16} /> },
   ];
 
   const moreLinks = [
     { to: "/risk", label: "Risk score", icon: <Shield size={16} /> },
     { to: "/risk/breakdown", label: "Risk explain", icon: <ClipboardList size={16} /> },
     { to: "/sensitivity", label: "Stress Test", icon: <Activity size={16} /> },
-    { to: "/plans", label: "Plans", icon: <Sparkles size={16} /> },
     { to: "/admin", label: "Admin", icon: <ShieldCheck size={16} /> },
   ];
   const filteredMoreLinks = moreLinks.filter(
