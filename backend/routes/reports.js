@@ -1,5 +1,6 @@
 const express = require("express");
 const fs = require("node:fs/promises");
+const path = require("node:path");
 const { requireAuth, attachUser, requireMinTier } = require("../middleware/auth");
 const ReportJob = require("../models/ReportJob");
 const Country = require("../models/Country");
@@ -7,6 +8,32 @@ const { enqueueReportJob, cancelQueueJob, reportQueue } = require("../queues/rep
 const { normalizeSections, buildReportData, buildPdfBuffer } = require("../services/reportBuilder");
 
 const router = express.Router();
+
+async function generateReportInline(reportJob) {
+  const reportData = await buildReportData({
+    sections: reportJob.sections,
+    countryCode: reportJob.countryCode,
+    commodityId: reportJob.commodityId,
+    dateFrom: reportJob.dateFrom,
+    dateTo: reportJob.dateTo,
+  });
+  const pdfBuffer = await buildPdfBuffer(reportJob.title || "TradeAI Intelligence Report", reportData);
+  const reportsDir = path.resolve(process.cwd(), "data", "reports");
+  await fs.mkdir(reportsDir, { recursive: true });
+  const fileName = `tradeai-report-${reportJob._id}.pdf`;
+  const filePath = path.join(reportsDir, fileName);
+  await fs.writeFile(filePath, pdfBuffer);
+
+  reportJob.snapshot = reportData;
+  reportJob.status = "ready";
+  reportJob.generatedAt = new Date();
+  reportJob.reportFilePath = filePath;
+  reportJob.reportFileName = fileName;
+  reportJob.reportMimeType = "application/pdf";
+  reportJob.reportFileSize = pdfBuffer.length;
+  reportJob.errorMessage = "";
+  await reportJob.save();
+}
 
 // GET /api/reports/trade-summary — PDF snapshot (Gold+; Silver uses dashboard JSON only)
 router.get("/trade-summary", requireAuth, requireMinTier("gold"), async (req, res) => {
@@ -55,13 +82,23 @@ router.post("/generate", requireAuth, attachUser, async (req, res) => {
       dateTo: req.body.dateTo || null,
     });
 
-    const queueJob = await enqueueReportJob(job._id);
-    job.queueJobId = String(queueJob.id);
-    await job.save();
+    let queueState = "enqueued";
+    try {
+      const queueJob = await enqueueReportJob(job._id);
+      job.queueJobId = String(queueJob.id);
+      await job.save();
+    } catch (queueErr) {
+      // Fallback mode: if Redis/queue is unavailable, generate immediately.
+      await generateReportInline(job);
+      queueState = "inline_fallback";
+      if (process.env.NODE_ENV !== "production") {
+        console.warn(`Report queue unavailable; generated inline: ${queueErr.message}`);
+      }
+    }
 
     res.status(201).json({
       ...job.toObject(),
-      queueState: "enqueued",
+      queueState,
     });
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -118,17 +155,7 @@ router.get("/metrics", requireAuth, attachUser, async (req, res) => {
       return res.status(403).json({ message: "Admin role required" });
     }
 
-    const [
-      pendingCount,
-      readyCount,
-      failedCount,
-      cancelledCount,
-      filesAgg,
-      waitingJobs,
-      activeJobs,
-      delayedJobs,
-      failedJobs,
-    ] = await Promise.all([
+    const [pendingCount, readyCount, failedCount, cancelledCount, filesAgg] = await Promise.all([
       ReportJob.countDocuments({ status: "pending" }),
       ReportJob.countDocuments({ status: "ready" }),
       ReportJob.countDocuments({ status: "failed" }),
@@ -137,11 +164,23 @@ router.get("/metrics", requireAuth, attachUser, async (req, res) => {
         { $match: { reportFileSize: { $ne: null } } },
         { $group: { _id: null, totalBytes: { $sum: "$reportFileSize" }, fileCount: { $sum: 1 } } },
       ]),
-      reportQueue.getWaitingCount(),
-      reportQueue.getActiveCount(),
-      reportQueue.getDelayedCount(),
-      reportQueue.getFailedCount(),
     ]);
+
+    let waitingJobs = 0;
+    let activeJobs = 0;
+    let delayedJobs = 0;
+    let failedJobs = 0;
+    let queueAvailable = true;
+    try {
+      [waitingJobs, activeJobs, delayedJobs, failedJobs] = await Promise.all([
+        reportQueue.getWaitingCount(),
+        reportQueue.getActiveCount(),
+        reportQueue.getDelayedCount(),
+        reportQueue.getFailedCount(),
+      ]);
+    } catch {
+      queueAvailable = false;
+    }
 
     return res.json({
       jobs: {
@@ -155,6 +194,7 @@ router.get("/metrics", requireAuth, attachUser, async (req, res) => {
         active: activeJobs,
         delayed: delayedJobs,
         failed: failedJobs,
+        available: queueAvailable,
       },
       storage: {
         files: filesAgg[0]?.fileCount || 0,
@@ -184,9 +224,13 @@ router.post("/:id/retry", requireAuth, attachUser, async (req, res) => {
     job.generatedAt = null;
     await job.save();
 
-    const queueJob = await enqueueReportJob(job._id);
-    job.queueJobId = String(queueJob.id);
-    await job.save();
+    try {
+      const queueJob = await enqueueReportJob(job._id);
+      job.queueJobId = String(queueJob.id);
+      await job.save();
+    } catch {
+      await generateReportInline(job);
+    }
     return res.json(job);
   } catch (err) {
     return res.status(500).json({ message: err.message });
@@ -204,7 +248,11 @@ router.post("/:id/cancel", requireAuth, attachUser, async (req, res) => {
     if (job.status !== "pending") {
       return res.status(409).json({ message: "Only pending jobs can be cancelled" });
     }
-    await cancelQueueJob(job.queueJobId);
+    try {
+      await cancelQueueJob(job.queueJobId);
+    } catch {
+      // Queue may be unavailable; still allow metadata cancellation.
+    }
     job.status = "cancelled";
     job.errorMessage = "Cancelled by user";
     await job.save();

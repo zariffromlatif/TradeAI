@@ -28,6 +28,7 @@ function ComparativeAnalysis() {
   const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fallbackNotice, setFallbackNotice] = useState("");
 
   // 1. Fetch Dropdowns on page load
   useEffect(() => {
@@ -37,11 +38,16 @@ function ComparativeAnalysis() {
     }).catch(err => console.error(err));
 
     axios.get(`${API}/commodities`).then((res) => {
-      const cleanCommodities = res.data.filter(c => !c.name.toLowerCase().includes("hs total") && !c.name.toLowerCase().includes("all"));
-      setCommodities(cleanCommodities);
-      // Auto-select the first commodity so the user only has to pick countries
-      if (cleanCommodities.length > 0) {
-        setCommodity(cleanCommodities[0]._id);
+      const list = res.data || [];
+      setCommodities(list);
+      // Prefer aggregate commodity by default because synced official rows are often national totals.
+      const aggregate =
+        list.find((c) => String(c.name || "").toLowerCase().includes("hs total")) ||
+        list.find((c) => String(c.name || "").toLowerCase().includes("all commodities"));
+      if (aggregate?._id) {
+        setCommodity(aggregate._id);
+      } else if (list.length > 0) {
+        setCommodity(list[0]._id);
       }
     }).catch(err => console.error(err));
   }, []);
@@ -53,20 +59,42 @@ function ComparativeAnalysis() {
     
     setLoading(true);
     setError("");
-    
-    axios.get(`${API}/analytics/compare`, {
-      params: {
-        countries: `${countryA},${countryB}`,
-        commodities: commodity,
-        type: tradeType
-      }
-    }).then((res) => {
-      setChartData(res.data.trendData || []);
-    }).catch(() => {
-      setError("Failed to load comparison data.");
-    }).finally(() => {
-      setLoading(false);
-    });
+    setFallbackNotice("");
+
+    const primaryParams = {
+      countries: `${countryA},${countryB}`,
+      commodities: commodity,
+      type: tradeType
+    };
+
+    axios
+      .get(`${API}/analytics/compare`, { params: primaryParams })
+      .then(async (res) => {
+        const primaryData = res.data?.trendData || [];
+        if (primaryData.length > 0) {
+          setChartData(primaryData);
+          return;
+        }
+
+        // Fallback to aggregate totals when the selected commodity has no overlap.
+        const fallbackRes = await axios.get(`${API}/analytics/compare`, {
+          params: {
+            countries: `${countryA},${countryB}`,
+            type: tradeType,
+          },
+        });
+        const fallbackData = fallbackRes.data?.trendData || [];
+        setChartData(fallbackData);
+        if (fallbackData.length > 0) {
+          setFallbackNotice("No overlap for selected commodity. Showing All Commodities (HS TOTAL) instead.");
+        }
+      })
+      .catch(() => {
+        setError("Failed to load comparison data.");
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, [countryA, countryB, commodity, tradeType]); // React watches these 4 variables!
 
   return (
@@ -113,7 +141,9 @@ function ComparativeAnalysis() {
           >
             <option value="">Select Commodity...</option>
             {commodities.map(c => (
-              <option key={c._id} value={c._id}>{c.name}</option>
+              <option key={c._id} value={c._id}>
+                {c.name}
+              </option>
             ))}
           </select>
         </div>
@@ -140,6 +170,7 @@ function ComparativeAnalysis() {
       {/* Visualization Graph */}
       <div className="bg-[#121212] border border-[#2a2a2a] rounded-2xl p-5 h-[450px]">
         {error && <p className="text-red-400 mb-4">{error}</p>}
+        {fallbackNotice && <p className="text-amber-400 mb-4">{fallbackNotice}</p>}
         
         {!countryA || !countryB || !commodity ? (
           <div className="flex items-center justify-center h-full text-neutral-500">
@@ -150,8 +181,10 @@ function ComparativeAnalysis() {
             Loading overlap data...
           </div>
         ) : chartData.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-neutral-500">
-            No overlapping trade records found for this combination.
+          <div className="flex items-center justify-center h-full text-neutral-500 text-center px-8">
+            No overlapping rows for this commodity and country pair.
+            <br />
+            Try selecting <span className="text-neutral-300 ml-1">All Commodities (HS TOTAL)</span>.
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
