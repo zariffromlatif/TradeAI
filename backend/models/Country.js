@@ -16,6 +16,7 @@ const CountrySchema = new mongoose.Schema(
     foreignReserves: { type: Number }, // months of imports covered
     fxVolatility: { type: Number }, // currency volatility index
     currentAccount: { type: Number }, // current account balance as % of GDP
+    destructionDate: { type: Date }, //Destruction date for countries
   },
   { timestamps: true },
 );

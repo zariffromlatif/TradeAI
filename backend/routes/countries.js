@@ -6,7 +6,8 @@ const Country = require("../models/Country");
 
 function handleValidation(req, res, next) {
   const errors = validationResult(req);
-  if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+  if (!errors.isEmpty())
+    return res.status(400).json({ errors: errors.array() });
   next();
 }
 
@@ -43,6 +44,7 @@ router.post(
     body("GDP").optional().isFloat(),
     body("inflation").optional().isFloat(),
     body("tradeBalance").optional().isFloat(),
+    body("destructionDate").optional().isISO8601(),
   ],
   handleValidation,
   async (req, res) => {
@@ -69,6 +71,7 @@ router.put(
     body("GDP").optional().isFloat(),
     body("inflation").optional().isFloat(),
     body("tradeBalance").optional().isFloat(),
+    body("destructionDate").optional().isISO8601(),
   ],
   handleValidation,
   async (req, res) => {
@@ -76,7 +79,8 @@ router.put(
       const updated = await Country.findByIdAndUpdate(req.params.id, req.body, {
         new: true,
       });
-      if (!updated) return res.status(404).json({ message: "Country not found" });
+      if (!updated)
+        return res.status(404).json({ message: "Country not found" });
       res.json(updated);
     } catch (err) {
       res.status(400).json({ message: err.message });
@@ -94,7 +98,8 @@ router.delete(
   async (req, res) => {
     try {
       const deleted = await Country.findByIdAndDelete(req.params.id);
-      if (!deleted) return res.status(404).json({ message: "Country not found" });
+      if (!deleted)
+        return res.status(404).json({ message: "Country not found" });
       res.json({ message: "Country deleted" });
     } catch (err) {
       res.status(500).json({ message: err.message });

@@ -37,8 +37,6 @@ JWT_REMEMBER_EXPIRES_IN=14d
 CORS_ORIGINS=http://localhost:5173
 ```
 
-> Ask **Member A** for the actual MongoDB Atlas credentials. Do NOT commit `.env` to git.
-
 ### 3. Start the backend server
 
 ```bash
@@ -138,17 +136,17 @@ Base URL: `http://localhost:5000`
 
 ### Analytics + Forecasts
 
-| Method | Endpoint                                | Description |
-| ------ | ---------------------------------------- | ----------- |
-| GET    | `/api/analytics/dashboard`               | Top exporters/importers |
-| GET    | `/api/analytics/data-health`             | Data freshness status for trade, commodity, FX |
-| GET    | `/api/analytics/trade-balance`           | Time-series trade balance |
-| GET    | `/api/analytics/country/:code`           | Country aggregates / monthly data |
-| GET    | `/api/analytics/compare`                 | Dual-country comparison |
-| POST   | `/api/analytics/forecast/volume`         | Trade-volume forecast |
-| POST   | `/api/analytics/forecast/price-volatility` | FX volatility (real FX pair, fallback commodity proxy) |
-| GET    | `/api/analytics/fx/pairs`                | Available synced FX pairs |
-| GET/POST | `/api/analytics/risk/:country`, `/api/analytics/risk-score` | ML risk score bridge |
+| Method   | Endpoint                                                    | Description                                            |
+| -------- | ----------------------------------------------------------- | ------------------------------------------------------ |
+| GET      | `/api/analytics/dashboard`                                  | Top exporters/importers                                |
+| GET      | `/api/analytics/data-health`                                | Data freshness status for trade, commodity, FX         |
+| GET      | `/api/analytics/trade-balance`                              | Time-series trade balance                              |
+| GET      | `/api/analytics/country/:code`                              | Country aggregates / monthly data                      |
+| GET      | `/api/analytics/compare`                                    | Dual-country comparison                                |
+| POST     | `/api/analytics/forecast/volume`                            | Trade-volume forecast                                  |
+| POST     | `/api/analytics/forecast/price-volatility`                  | FX volatility (real FX pair, fallback commodity proxy) |
+| GET      | `/api/analytics/fx/pairs`                                   | Available synced FX pairs                              |
+| GET/POST | `/api/analytics/risk/:country`, `/api/analytics/risk-score` | ML risk score bridge                                   |
 
 ---
 
@@ -200,14 +198,14 @@ Base URL: `http://localhost:5000`
 
 ### Marketplace (Feature 10 evolution + authz hardening)
 
-| Method | Endpoint | Description |
-| ------ | -------- | ----------- |
-| GET/POST | `/api/marketplace/rfqs` | List and create RFQs (create requires buyer/admin JWT) |
-| GET/PATCH | `/api/marketplace/rfqs/:id`, `/api/marketplace/rfqs/:id/state` | RFQ detail and state transition (owner/admin) |
-| GET/POST | `/api/marketplace/rfqs/:id/quotes` | List and submit quotes (seller/admin) |
-| POST | `/api/marketplace/quotes/:id/accept` | Accept one quote and create deal (RFQ owner buyer/admin) |
-| GET | `/api/marketplace/deals` | List awarded RFQ deals (caller-scoped unless admin) |
-| PUT | `/api/marketplace/deals/:id/settlement` | Update off-platform settlement state (deal parties/admin) |
+| Method    | Endpoint                                                       | Description                                               |
+| --------- | -------------------------------------------------------------- | --------------------------------------------------------- |
+| GET/POST  | `/api/marketplace/rfqs`                                        | List and create RFQs (create requires buyer/admin JWT)    |
+| GET/PATCH | `/api/marketplace/rfqs/:id`, `/api/marketplace/rfqs/:id/state` | RFQ detail and state transition (owner/admin)             |
+| GET/POST  | `/api/marketplace/rfqs/:id/quotes`                             | List and submit quotes (seller/admin)                     |
+| POST      | `/api/marketplace/quotes/:id/accept`                           | Accept one quote and create deal (RFQ owner buyer/admin)  |
+| GET       | `/api/marketplace/deals`                                       | List awarded RFQ deals (caller-scoped unless admin)       |
+| PUT       | `/api/marketplace/deals/:id/settlement`                        | Update off-platform settlement state (deal parties/admin) |
 
 Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
 
@@ -215,14 +213,14 @@ Marketplace actor identity is derived from JWT (`req.auth.sub`) only.
 
 ## Operational scripts
 
-| Script | Purpose |
-| ------ | ------- |
-| `node scripts/syncCommodityPrices.js` | Sync real commodity prices |
-| `node scripts/syncTradeFlows.js` | Sync real national trade records (World Bank, free) |
-| `node scripts/syncFxRates.js` | Sync real FX historical series |
-| `node scripts/verifyMarketplaceFlow.js` | Verify RFQ→quote→deal lifecycle |
-| `node scripts/verifyMarketplaceGuards.js` | Verify RFQ state transitions + bid guard rules |
-| `node scripts/verifyPartnerProfiles.js` | Verify partner profile metrics |
+| Script                                    | Purpose                                             |
+| ----------------------------------------- | --------------------------------------------------- |
+| `node scripts/syncCommodityPrices.js`     | Sync real commodity prices                          |
+| `node scripts/syncTradeFlows.js`          | Sync real national trade records (World Bank, free) |
+| `node scripts/syncFxRates.js`             | Sync real FX historical series                      |
+| `node scripts/verifyMarketplaceFlow.js`   | Verify RFQ→quote→deal lifecycle                     |
+| `node scripts/verifyMarketplaceGuards.js` | Verify RFQ state transitions + bid guard rules      |
+| `node scripts/verifyPartnerProfiles.js`   | Verify partner profile metrics                      |
 
 ---
 

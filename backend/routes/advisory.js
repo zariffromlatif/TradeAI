@@ -12,7 +12,7 @@ const RiskScore = require("../models/RiskScore");
 const FxRate = require("../models/FxRate");
 
 const router = express.Router();
-const ML_BASE = "http://127.0.0.1:8000";
+const ML_BASE = process.env.ML_BASE_URL || "http://127.0.0.1:8000";
 
 // POST /api/advisory/recommend — F14 rule-based advisory (uses ML for risk score)
 router.post("/recommend", requireAuth, requireMinTier("gold"), async (req, res) => {

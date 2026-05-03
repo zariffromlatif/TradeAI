@@ -1,13 +1,46 @@
 const express = require("express");
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { requireAuth, attachUser, requireMinTier } = require("../middleware/auth");
+const {
+  requireAuth,
+  attachUser,
+  requireMinTier,
+} = require("../middleware/auth");
 const ReportJob = require("../models/ReportJob");
 const Country = require("../models/Country");
-const { enqueueReportJob, cancelQueueJob, reportQueue } = require("../queues/reportQueue");
-const { normalizeSections, buildReportData, buildPdfBuffer } = require("../services/reportBuilder");
+const {
+  enqueueReportJob,
+  cancelQueueJob,
+  reportQueue,
+} = require("../queues/reportQueue");
+const {
+  normalizeSections,
+  buildReportData,
+  buildPdfBuffer,
+} = require("../services/reportBuilder");
 
 const router = express.Router();
+
+function getRetentionDays() {
+  const days = Number(process.env.REPORT_RETENTION_DAYS || 30);
+  return Number.isFinite(days) && days > 0 ? days : 30;
+}
+
+function computeDestructionMeta(jobLike) {
+  const base = jobLike.generatedAt || jobLike.createdAt || null;
+  if (!base) return { destructionAt: null, remainingMs: null };
+
+  const baseMs = new Date(base).getTime();
+  if (!Number.isFinite(baseMs))
+    return { destructionAt: null, remainingMs: null };
+
+  const destructionMs = baseMs + getRetentionDays() * 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  return {
+    destructionAt: new Date(destructionMs).toISOString(),
+    remainingMs: destructionMs - nowMs,
+  };
+}
 
 async function generateReportInline(reportJob) {
   const reportData = await buildReportData({
@@ -17,7 +50,10 @@ async function generateReportInline(reportJob) {
     dateFrom: reportJob.dateFrom,
     dateTo: reportJob.dateTo,
   });
-  const pdfBuffer = await buildPdfBuffer(reportJob.title || "TradeAI Intelligence Report", reportData);
+  const pdfBuffer = await buildPdfBuffer(
+    reportJob.title || "TradeAI Intelligence Report",
+    reportData,
+  );
   const reportsDir = path.resolve(process.cwd(), "data", "reports");
   await fs.mkdir(reportsDir, { recursive: true });
   const fileName = `tradeai-report-${reportJob._id}.pdf`;
@@ -36,22 +72,30 @@ async function generateReportInline(reportJob) {
 }
 
 // GET /api/reports/trade-summary — PDF snapshot (Gold+; Silver uses dashboard JSON only)
-router.get("/trade-summary", requireAuth, requireMinTier("gold"), async (req, res) => {
-  try {
-    const reportData = await buildReportData({ sections: ["analytics"] });
-    const pdfBuffer = await buildPdfBuffer("TradeAI — Trade summary", reportData);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      'attachment; filename="tradeai-trade-summary.pdf"',
-    );
-    res.send(pdfBuffer);
-  } catch (err) {
-    if (!res.headersSent) {
-      res.status(500).json({ message: err.message });
+router.get(
+  "/trade-summary",
+  requireAuth,
+  requireMinTier("gold"),
+  async (req, res) => {
+    try {
+      const reportData = await buildReportData({ sections: ["analytics"] });
+      const pdfBuffer = await buildPdfBuffer(
+        "TradeAI — Trade summary",
+        reportData,
+      );
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader(
+        "Content-Disposition",
+        'attachment; filename="tradeai-trade-summary.pdf"',
+      );
+      res.send(pdfBuffer);
+    } catch (err) {
+      if (!res.headersSent) {
+        res.status(500).json({ message: err.message });
+      }
     }
-  }
-});
+  },
+);
 
 // POST /api/reports/generate
 // Creates report job metadata and enqueues async generation.
@@ -62,12 +106,22 @@ router.post("/generate", requireAuth, attachUser, async (req, res) => {
       ? String(req.body.countryCode).toUpperCase()
       : null;
     const commodityId = req.body.commodityId || null;
-    const title = String(req.body.title || "TradeAI Intelligence Report").trim();
-    const scope = req.user.role === "admin" && req.body.scope === "admin_all" ? "admin_all" : "self";
+    const title = String(
+      req.body.title || "TradeAI Intelligence Report",
+    ).trim();
+    const scope =
+      req.user.role === "admin" && req.body.scope === "admin_all"
+        ? "admin_all"
+        : "self";
 
     if (countryCode) {
-      const exists = await Country.findOne({ code: countryCode }).select("_id").lean();
-      if (!exists) return res.status(404).json({ message: "Country not found for report." });
+      const exists = await Country.findOne({ code: countryCode })
+        .select("_id")
+        .lean();
+      if (!exists)
+        return res
+          .status(404)
+          .json({ message: "Country not found for report." });
     }
 
     const job = await ReportJob.create({
@@ -92,7 +146,9 @@ router.post("/generate", requireAuth, attachUser, async (req, res) => {
       await generateReportInline(job);
       queueState = "inline_fallback";
       if (process.env.NODE_ENV !== "production") {
-        console.warn(`Report queue unavailable; generated inline: ${queueErr.message}`);
+        console.warn(
+          `Report queue unavailable; generated inline: ${queueErr.message}`,
+        );
       }
     }
 
@@ -112,8 +168,13 @@ router.get("/:id/status", requireAuth, attachUser, async (req, res) => {
       "_id ownerId status queueJobId generatedAt errorMessage createdAt updatedAt reportFileName reportFileSize",
     );
     if (!job) return res.status(404).json({ message: "Report job not found" });
-    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Not allowed to access this report job" });
+    if (
+      req.user.role !== "admin" &&
+      String(job.ownerId) !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not allowed to access this report job" });
     }
     return res.json(job);
   } catch (err) {
@@ -124,11 +185,13 @@ router.get("/:id/status", requireAuth, attachUser, async (req, res) => {
 // GET /api/reports/history
 router.get("/history", requireAuth, attachUser, async (req, res) => {
   try {
-    const filter = req.user.role === "admin" && req.query.scope === "all"
-      ? {}
-      : { ownerId: req.user._id };
+    const filter =
+      req.user.role === "admin" && req.query.scope === "all"
+        ? {}
+        : { ownerId: req.user._id };
     if (req.query.status) filter.status = String(req.query.status);
-    if (req.query.countryCode) filter.countryCode = String(req.query.countryCode).toUpperCase();
+    if (req.query.countryCode)
+      filter.countryCode = String(req.query.countryCode).toUpperCase();
     if (req.user.role === "admin" && req.query.ownerId) {
       filter.ownerId = String(req.query.ownerId);
     }
@@ -155,16 +218,23 @@ router.get("/metrics", requireAuth, attachUser, async (req, res) => {
       return res.status(403).json({ message: "Admin role required" });
     }
 
-    const [pendingCount, readyCount, failedCount, cancelledCount, filesAgg] = await Promise.all([
-      ReportJob.countDocuments({ status: "pending" }),
-      ReportJob.countDocuments({ status: "ready" }),
-      ReportJob.countDocuments({ status: "failed" }),
-      ReportJob.countDocuments({ status: "cancelled" }),
-      ReportJob.aggregate([
-        { $match: { reportFileSize: { $ne: null } } },
-        { $group: { _id: null, totalBytes: { $sum: "$reportFileSize" }, fileCount: { $sum: 1 } } },
-      ]),
-    ]);
+    const [pendingCount, readyCount, failedCount, cancelledCount, filesAgg] =
+      await Promise.all([
+        ReportJob.countDocuments({ status: "pending" }),
+        ReportJob.countDocuments({ status: "ready" }),
+        ReportJob.countDocuments({ status: "failed" }),
+        ReportJob.countDocuments({ status: "cancelled" }),
+        ReportJob.aggregate([
+          { $match: { reportFileSize: { $ne: null } } },
+          {
+            $group: {
+              _id: null,
+              totalBytes: { $sum: "$reportFileSize" },
+              fileCount: { $sum: 1 },
+            },
+          },
+        ]),
+      ]);
 
     let waitingJobs = 0;
     let activeJobs = 0;
@@ -212,11 +282,18 @@ router.post("/:id/retry", requireAuth, attachUser, async (req, res) => {
   try {
     const job = await ReportJob.findById(req.params.id);
     if (!job) return res.status(404).json({ message: "Report job not found" });
-    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Not allowed to retry this report job" });
+    if (
+      req.user.role !== "admin" &&
+      String(job.ownerId) !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not allowed to retry this report job" });
     }
     if (!["failed", "cancelled"].includes(job.status)) {
-      return res.status(409).json({ message: "Only failed/cancelled jobs can be retried" });
+      return res
+        .status(409)
+        .json({ message: "Only failed/cancelled jobs can be retried" });
     }
     job.status = "pending";
     job.errorMessage = "";
@@ -242,11 +319,18 @@ router.post("/:id/cancel", requireAuth, attachUser, async (req, res) => {
   try {
     const job = await ReportJob.findById(req.params.id);
     if (!job) return res.status(404).json({ message: "Report job not found" });
-    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Not allowed to cancel this report job" });
+    if (
+      req.user.role !== "admin" &&
+      String(job.ownerId) !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not allowed to cancel this report job" });
     }
     if (job.status !== "pending") {
-      return res.status(409).json({ message: "Only pending jobs can be cancelled" });
+      return res
+        .status(409)
+        .json({ message: "Only pending jobs can be cancelled" });
     }
     try {
       await cancelQueueJob(job.queueJobId);
@@ -265,13 +349,23 @@ router.post("/:id/cancel", requireAuth, attachUser, async (req, res) => {
 // GET /api/reports/:id/download
 router.get("/:id/download", requireAuth, attachUser, async (req, res) => {
   try {
-    const job = await ReportJob.findById(req.params.id).populate("commodityId", "name");
+    const job = await ReportJob.findById(req.params.id).populate(
+      "commodityId",
+      "name",
+    );
     if (!job) return res.status(404).json({ message: "Report job not found" });
-    if (req.user.role !== "admin" && String(job.ownerId) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Not allowed to download this report" });
+    if (
+      req.user.role !== "admin" &&
+      String(job.ownerId) !== String(req.user._id)
+    ) {
+      return res
+        .status(403)
+        .json({ message: "Not allowed to download this report" });
     }
     if (job.status !== "ready") {
-      return res.status(409).json({ message: `Report status is ${job.status}` });
+      return res
+        .status(409)
+        .json({ message: `Report status is ${job.status}` });
     }
 
     const reportData =
@@ -298,7 +392,10 @@ router.get("/:id/download", requireAuth, attachUser, async (req, res) => {
       }
     }
     if (!pdfBuffer) {
-      pdfBuffer = await buildPdfBuffer(job.title || "TradeAI Intelligence Report", reportData);
+      pdfBuffer = await buildPdfBuffer(
+        job.title || "TradeAI Intelligence Report",
+        reportData,
+      );
     }
     res.send(pdfBuffer);
   } catch (err) {

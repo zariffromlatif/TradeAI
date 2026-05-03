@@ -1,4 +1,5 @@
 const path = require("node:path");
+const dns = require("node:dns");
 const mongoose = require("mongoose");
 const axios = require("axios");
 require("dotenv").config({ path: path.join(__dirname, "../.env") });
@@ -27,6 +28,11 @@ const WB_MAX_ATTEMPTS = Math.max(
   1,
   Number.parseInt(process.env.TRADE_SYNC_HTTP_ATTEMPTS || "3", 10) || 3,
 );
+
+// Stabilize DNS resolution for external APIs on some Windows/ISP networks.
+try {
+  dns.setServers(["1.1.1.1", "8.8.8.8"]);
+} catch {}
 
 function getReporterCodes() {
   const raw = process.env.TRADE_SYNC_COUNTRY_CODES || process.env.COMTRADE_REPORTER_CODES || "BD,US,IN,CN,DE";
@@ -253,10 +259,16 @@ async function run() {
       ]);
     } catch (err) {
       failed += 1;
+      const errCode = err.response?.status || err.code || err.message;
       console.warn(
         `Reporter ${reporterCode}: World Bank request failed after retries:`,
-        err.response?.status || err.code || err.message,
+        errCode,
       );
+      if (String(err.code || "").toUpperCase() === "EAI_AGAIN") {
+        console.warn(
+          "DNS lookup failed (EAI_AGAIN). Check internet/DNS, disable restrictive VPN/proxy/firewall, then retry.",
+        );
+      }
       continue;
     }
 

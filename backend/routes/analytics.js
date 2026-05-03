@@ -19,7 +19,7 @@ const { getNationalPartnerMatch } = require("../services/nationalTradeSupport");
 const { maxForecastHorizon } = require("../services/tier");
 const { requireAuth, requireMinTier } = require("../middleware/auth");
 
-const ML_BASE = "http://127.0.0.1:8000";
+const ML_BASE = process.env.ML_BASE_URL || "http://127.0.0.1:8000";
 const REAL_TRADE_MATCH = {
   isVerified: true,
   source: { $in: ["un_comtrade", "official_api", "world_bank_api"] },
