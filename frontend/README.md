@@ -1,8 +1,8 @@
 # TradeAI Frontend
 
-React + Vite SPA for analytics, forecasting, risk, simulation, advisory, and marketplace workflows.
+React + Vite application for TradeAI features.
 
-## Run locally
+## Run Locally
 
 ```bash
 cd frontend
@@ -10,25 +10,29 @@ npm install
 npm run dev
 ```
 
-Frontend runs on `http://localhost:5173` and calls backend APIs at `http://localhost:5000/api`.
-Set API base via `frontend/.env` (see `frontend/.env.example`) using `VITE_API_BASE_URL`.
+Default URL: `http://localhost:5173`
 
-## Main pages
+Set API base in `.env`:
 
-- `Dashboard` (`/dashboard`) — KPI cards and import/export charts
-- `Commodities` (`/commodities`) — trend visualization and provenance
-- `Compare` (`/compare`) — dual-country comparison with official/fallback status
-- `Forecasts` (`/forecasts`) — Feature-AR trade-volume forecast + real FX volatility
-- `Advisory` (`/advisory`) — rule-based recommendations
-- `Marketplace` (`/orders`) — RFQ board, quote flow, and deal settlement tracking
-- `Risk score` / `Risk explain` (`/risk`, `/risk/breakdown`)
-- `Simulation` (`/sim`) and payment/premium routes
+```env
+VITE_API_BASE_URL=http://localhost:5000/api
+```
 
-## Key implementation notes
+## Main Pages
 
-- Theme: monochrome UI with subtle accent, shared utility classes in `src/index.css`.
-- Charts: Recharts-based, tuned for dark contrast/readability.
-- Forecast volume uses Feature-AR output with uncertainty bands and source-frequency metadata from backend.
-- Forecast volatility uses real FX pairs from backend `GET /api/analytics/fx/pairs`.
-- Marketplace actions now use Bearer JWT (no `x-user-id` headers); role-based behavior is enforced by backend.
-- Dashboard supports verified-data fallback mode and empty-state messaging when verified records are unavailable.
+- `/dashboard` - analytics overview
+- `/commodities` - commodity trend charts
+- `/compare` - country + commodity comparison (with sparse-data fallback)
+- `/forecasts` - volume and volatility forecasts
+- `/risk` and `/risk/breakdown` - risk scoring and interpretability
+- `/orders` - RFQ marketplace and trade operation screens
+- `/alerts` - anomaly notifications
+- `/sim` - profitability, landed-cost, and stress test
+- `/advisory` - recommendation engine
+- `/plans` - user upgrade flow (manual + Stripe path)
+- `/admin/*` - admin operations
+
+## Notes
+
+- Theme and global styles are managed in `src/index.css`.
+- Pages are tier-aware and depend on backend authorization checks.

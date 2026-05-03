@@ -112,16 +112,20 @@ Open in browser: [http://localhost:5173](http://localhost:5173)
 
 ## 6) Smoke test checklist
 
-- Dashboard loads charts
-- Compare page shows data and official/fallback badge
-- Forecast page shows volume forecast and FX volatility
-- Risk pages load (when ML service is running)
-- Alerts/Orders pages open without API errors
+- Dashboard loads charts and top-country cards
+- Compare page shows data and fallback notice only when commodity overlap is sparse
+- Forecast page shows volume forecast and volatility output
+- Risk and risk-breakdown pages load (with ML service active)
+- Plans page can submit demo/manual upgrade request (pending admin approval path)
+- Orders page supports RFQ board and quote/deal interactions
+- Admin pages load dataset CRUD, payment requests, and report tools
 
 ## 7) Troubleshooting
 
 - Risk or forecast returns 500:
   - ML service is likely not running on port 8000
+- Upgrade does not reflect immediately:
+  - refresh claims using `POST /api/auth/refresh-token-claims` (or relogin)
 - Blank compare or forecast:
   - Re-run:
 
