@@ -6,7 +6,7 @@
 
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
-# Use a release with manylinux wheels on Render; 2.2.x may fall back to sdist
-# and stall on "Preparing metadata" for several minutes (or OOM) on free tiers.
-numpy==2.1.4
+# Manylinux wheels for Render/Railway; avoids long sdist builds on free tiers.
+# Note: NumPy never published 2.1.4 on PyPI (pip skips 2.1.3 -> 2.2.0).
+numpy==2.1.3
 scikit-learn==1.6.1
