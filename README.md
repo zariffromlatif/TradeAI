@@ -2,6 +2,12 @@
 
 TradeAI is a full-stack global trade intelligence platform combining analytics, risk, forecasting, simulation, marketplace operations, and admin governance.
 
+## Repository Structure
+
+- `frontend/` - React + Vite client app
+- `backend/` - Express API, auth, marketplace, reporting, admin workflows
+- `ml-service/` - FastAPI service for prediction and risk analytics
+
 ## Stack
 
 - Frontend: React + Vite
@@ -64,12 +70,30 @@ After tier changes, refresh claims via `POST /api/auth/refresh-token-claims`.
 See `WINDOWS_LOCAL_TESTING_GUIDE.md` for full setup.  
 Quick start:
 
-1. Install dependencies in `backend`, `frontend`, `ml-service`
-2. Configure `backend/.env` from `backend/.env.example`
-3. Start:
-   - backend: `node server.js`
-   - frontend: `npm run dev`
-   - ml-service: `python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000`
+1. Install dependencies:
+   - backend: `cd backend && npm install`
+   - frontend: `cd frontend && npm install`
+   - ml-service: `cd ml-service && pip install -r requirements.txt`
+2. Configure backend environment:
+   - copy `backend/.env.example` to `backend/.env`
+   - fill all required values listed below
+3. Start services in separate terminals:
+   - backend: `cd backend && npm start`
+   - frontend: `cd frontend && npm run dev`
+   - ml-service: `cd ml-service && python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000`
+
+## Common Scripts
+
+Backend (`backend/package.json`):
+- `npm start` - run API server
+- `npm run seed` - seed data
+- `npm test` - run marketplace verification checks
+
+Frontend (`frontend/package.json`):
+- `npm run dev` - run Vite dev server
+- `npm run build` - production build
+- `npm run lint` - lint source code
+- `npm run preview` - preview production build
 
 ## Required Backend Env Keys
 

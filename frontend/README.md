@@ -18,6 +18,13 @@ Set API base in `.env`:
 VITE_API_BASE_URL=http://localhost:5000/api
 ```
 
+## Scripts
+
+- `npm run dev` - run Vite dev server
+- `npm run build` - build for production
+- `npm run lint` - lint source files
+- `npm run preview` - preview production build locally
+
 ## Main Pages
 
 - `/dashboard` - analytics overview

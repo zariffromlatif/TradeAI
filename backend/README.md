@@ -17,8 +17,11 @@ Backend API for TradeAI (Express + MongoDB + Mongoose).
 ```bash
 cd backend
 npm install
-cp .env.example .env
-node server.js
+# Windows PowerShell
+Copy-Item .env.example .env
+# macOS/Linux
+# cp .env.example .env
+npm start
 ```
 
 Expected: `Server on port 5000`
@@ -54,11 +57,11 @@ Optional/feature keys:
 
 ## Operational Scripts
 
-- `node seed.js`
-- `node scripts/syncTradeFlows.js`
-- `node scripts/syncFxRates.js`
-- `node scripts/verifyMarketplaceFlow.js`
-- `node scripts/verifyMarketplaceGuards.js`
+- `npm start` - start backend API
+- `npm run seed` - seed database data
+- `npm test` - run marketplace verification checks
+- `node scripts/syncTradeFlows.js` - sync baseline trade flow dataset
+- `node scripts/syncFxRates.js` - sync exchange rate data
 
 ## Notes
 
