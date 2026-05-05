@@ -12,3 +12,13 @@ venv/
 # Build output
 dist/
 build/
+
+# OS files
+.DS_Store
+
+# Backup files
+*.bak
+
+# Lighthouse artifacts
+lighthouse-*.html
+lighthouse-*.png
